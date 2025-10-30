@@ -38,27 +38,36 @@ if (process.env.NODE_ENV === 'development') {
 // Static files for uploads
 app.use('/uploads', express.static('uploads'));
 
-// MongoDB Connection with enhanced auto-reconnect
-mongoose.set('bufferCommands', false); // Don't buffer commands if connection is lost
-mongoose.set('bufferTimeoutMS', 10000); // Timeout after 10 seconds
+// MongoDB Connection with enhanced auto-reconnect for Atlas
+mongoose.set('bufferCommands', false);    // Don't buffer commands if connection is lost
+mongoose.set('bufferTimeoutMS', 30000);   // 30s timeout for Atlas
+mongoose.set('strictQuery', false);       // Prepare for Mongoose 7
 
 const connectDB = async () => {
   try {
     await mongoose.connect(process.env.MONGODB_URI, {
-      serverSelectionTimeoutMS: 10000, // Increased to 10s
-      socketTimeoutMS: 45000,
-      heartbeatFrequencyMS: 2000, // Check connection every 2s
+      // Timeouts optimisés pour MongoDB Atlas
+      serverSelectionTimeoutMS: 30000,  // 30s pour Atlas
+      connectTimeoutMS: 30000,           // 30s timeout initial
+      
+      // Heartbeat et retry
+      heartbeatFrequencyMS: 10000,       // Check toutes les 10s (plus stable pour Atlas)
       retryWrites: true,
       retryReads: true,
+      
+      // Pool de connexions (keepAlive est géré automatiquement dans Mongoose 8+)
       maxPoolSize: 10,
-      minPoolSize: 2,
+      minPoolSize: 5,                    // 5 connexions minimum toujours actives
+      maxIdleTimeMS: 60000,              // Fermer les connexions inactives après 1 min
+      
+      // Autres
       family: 4
     });
-    console.log('✅ MongoDB Connected');
+    console.log('✅ MongoDB Atlas Connected');
   } catch (err) {
     console.error('❌ MongoDB Connection Error:', err.message);
-    console.log('🔄 Retrying connection in 3 seconds...');
-    setTimeout(connectDB, 3000);
+    console.log('🔄 Retrying connection in 5 seconds...');
+    setTimeout(connectDB, 5000);
   }
 };
 
