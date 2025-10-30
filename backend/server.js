@@ -95,8 +95,23 @@ mongoose.connection.on('reconnected', () => {
 // Initial connection
 connectDB();
 
-// Middleware to check DB connection before processing requests
+// Health check FIRST (accessible même si DB déconnectée)
+app.get('/api/health', (req, res) => {
+  const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
+  res.json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    database: dbStatus
+  });
+});
+
+// Middleware to check DB connection before processing other API requests
 app.use('/api/', (req, res, next) => {
+  // Skip DB check for health endpoint (already handled above)
+  if (req.path === '/health') {
+    return next();
+  }
+  
   if (mongoose.connection.readyState !== 1) {
     console.warn('⚠️ Request received but MongoDB not connected, returning 503');
     return res.status(503).json({ 
@@ -118,16 +133,6 @@ app.use('/api/comments', require('./routes/comments'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/history', require('./routes/history'));
 app.use('/api/export', require('./routes/export'));
-
-// Health check with MongoDB status
-app.get('/api/health', (req, res) => {
-  const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
-  res.json({ 
-    status: 'OK', 
-    timestamp: new Date().toISOString(),
-    database: dbStatus
-  });
-});
 
 // Error handling middleware
 app.use((err, req, res, next) => {
