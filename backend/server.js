@@ -9,6 +9,9 @@ require('dotenv').config();
 
 const app = express();
 
+// ✅ IMPORTANT pour Render : faire confiance au proxy HTTPS
+app.set('trust proxy', 1); // <-- AJOUT CLÉ POUR FIXER L'ERREUR X-FORWARDED-FOR
+
 // Security middleware
 app.use(helmet());
 app.use(compression());
@@ -39,28 +42,21 @@ if (process.env.NODE_ENV === 'development') {
 app.use('/uploads', express.static('uploads'));
 
 // MongoDB Connection with enhanced auto-reconnect for Atlas
-mongoose.set('bufferCommands', false);    // Don't buffer commands if connection is lost
-mongoose.set('bufferTimeoutMS', 30000);   // 30s timeout for Atlas
-mongoose.set('strictQuery', false);       // Prepare for Mongoose 7
+mongoose.set('bufferCommands', false);
+mongoose.set('bufferTimeoutMS', 30000);
+mongoose.set('strictQuery', false);
 
 const connectDB = async () => {
   try {
     await mongoose.connect(process.env.MONGODB_URI, {
-      // Timeouts optimisés pour MongoDB Atlas
-      serverSelectionTimeoutMS: 30000,  // 30s pour Atlas
-      connectTimeoutMS: 30000,           // 30s timeout initial
-      
-      // Heartbeat et retry
-      heartbeatFrequencyMS: 10000,       // Check toutes les 10s (plus stable pour Atlas)
+      serverSelectionTimeoutMS: 30000,
+      connectTimeoutMS: 30000,
+      heartbeatFrequencyMS: 10000,
       retryWrites: true,
       retryReads: true,
-      
-      // Pool de connexions (keepAlive est géré automatiquement dans Mongoose 8+)
       maxPoolSize: 10,
-      minPoolSize: 5,                    // 5 connexions minimum toujours actives
-      maxIdleTimeMS: 60000,              // Fermer les connexions inactives après 1 min
-      
-      // Autres
+      minPoolSize: 5,
+      maxIdleTimeMS: 60000,
       family: 4
     });
     console.log('✅ MongoDB Atlas Connected');
@@ -78,13 +74,11 @@ mongoose.connection.on('connected', () => {
 
 mongoose.connection.on('error', (err) => {
   console.error('❌ Mongoose connection error:', err.message);
-  // Don't exit, let the reconnection logic handle it
 });
 
 mongoose.connection.on('disconnected', () => {
   console.log('⚠️ Mongoose disconnected from MongoDB');
   console.log('🔄 Attempting immediate reconnection...');
-  // Try to reconnect immediately
   connectDB();
 });
 
@@ -95,27 +89,23 @@ mongoose.connection.on('reconnected', () => {
 // Initial connection
 connectDB();
 
-// Health check FIRST (accessible même si DB déconnectée)
+// Health check FIRST
 app.get('/api/health', (req, res) => {
   const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
-  res.json({ 
-    status: 'OK', 
+  res.json({
+    status: 'OK',
     timestamp: new Date().toISOString(),
     database: dbStatus
   });
 });
 
-// Middleware to check DB connection before processing other API requests
+// Middleware to check DB connection before other routes
 app.use('/api/', (req, res, next) => {
-  // Skip DB check for health endpoint (already handled above)
-  if (req.path === '/health') {
-    return next();
-  }
-  
+  if (req.path === '/health') return next();
   if (mongoose.connection.readyState !== 1) {
     console.warn('⚠️ Request received but MongoDB not connected, returning 503');
-    return res.status(503).json({ 
-      success: false, 
+    return res.status(503).json({
+      success: false,
       message: 'Service temporarily unavailable. Database is reconnecting...',
       retryAfter: 3
     });
