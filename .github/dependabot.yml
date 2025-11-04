@@ -1,0 +1,33 @@
+version: 2
+updates:
+  # --- Backend (Node.js / Express) ---
+  - package-ecosystem: "npm"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"      # Vérifie les dépendances chaque semaine
+    open-pull-requests-limit: 5
+    allow:
+      - dependency-type: "all"
+    commit-message:
+      prefix: "chore(backend): bump"
+    groups:
+      security-updates:
+        applies-to: security-updates
+        patterns:
+          - "*"
+
+  # --- Frontend (React / Vite) ---
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    allow:
+      - dependency-type: "all"
+    commit-message:
+      prefix: "chore(frontend): bump"
+    groups:
+      security-updates:
+        applies-to: security-updates
+        patterns:
+          - "*"
