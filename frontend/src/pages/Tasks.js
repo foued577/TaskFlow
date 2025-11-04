@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom'; // 👈 ajout pour lire les paramètres d’URL
 import { tasksAPI, projectsAPI } from '../utils/api';
 import { toast } from 'react-toastify';
 import { CheckSquare, Plus, Filter, Calendar as CalendarIcon, AlertCircle } from 'lucide-react';
@@ -8,6 +9,8 @@ import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
 const Tasks = () => {
+  const location = useLocation(); // 👈 pour détecter les paramètres de l’URL
+
   const [tasks, setTasks] = useState([]);
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -18,6 +21,22 @@ const Tasks = () => {
     status: '',
     priority: '',
   });
+
+  // ✅ Nouveau useEffect pour appliquer un filtre basé sur l’URL
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const statusParam = params.get('status');
+
+    if (statusParam) {
+      // Si on arrive depuis le Dashboard, applique le filtre automatiquement
+      if (statusParam === 'overdue') {
+        // Cas spécial pour "En retard"
+        setFilters({ projectId: '', status: 'not_started', priority: '' });
+      } else {
+        setFilters({ projectId: '', status: statusParam, priority: '' });
+      }
+    }
+  }, [location]);
 
   useEffect(() => {
     loadData();
@@ -178,8 +197,11 @@ const Tasks = () => {
       ) : (
         <div className="space-y-4">
           {tasks.map((task) => {
-            const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== 'completed';
-            
+            const isOverdue =
+              task.dueDate &&
+              new Date(task.dueDate) < new Date() &&
+              task.status !== 'completed';
+
             return (
               <div
                 key={task._id}
@@ -214,48 +236,19 @@ const Tasks = () => {
                       </span>
 
                       {task.dueDate && (
-                        <span className={`badge flex items-center ${
-                          isOverdue ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-700'
-                        }`}>
+                        <span
+                          className={`badge flex items-center ${
+                            isOverdue
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-gray-100 text-gray-700'
+                          }`}
+                        >
                           <CalendarIcon className="w-3 h-3 mr-1" />
                           {format(new Date(task.dueDate), 'dd MMM yyyy', { locale: fr })}
                           {isOverdue && <AlertCircle className="w-3 h-3 ml-1" />}
                         </span>
                       )}
-
-                      {task.estimatedHours > 0 && (
-                        <span className="badge bg-purple-100 text-purple-800">
-                          {task.estimatedHours}h estimées
-                        </span>
-                      )}
-
-                      {task.subtasks && task.subtasks.length > 0 && (
-                        <span className="badge bg-indigo-100 text-indigo-800">
-                          {task.subtasks.filter(st => st.isCompleted).length}/{task.subtasks.length} sous-tâches
-                        </span>
-                      )}
                     </div>
-
-                    {task.assignedTo && task.assignedTo.length > 0 && (
-                      <div className="flex items-center mt-3 ml-5">
-                        <div className="flex -space-x-2">
-                          {task.assignedTo.slice(0, 3).map((user) => (
-                            <div
-                              key={user._id}
-                              className="w-8 h-8 rounded-full bg-primary-600 flex items-center justify-center text-white text-xs font-semibold border-2 border-white"
-                              title={`${user.firstName} ${user.lastName}`}
-                            >
-                              {user.firstName?.charAt(0)}{user.lastName?.charAt(0)}
-                            </div>
-                          ))}
-                          {task.assignedTo.length > 3 && (
-                            <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center text-gray-700 text-xs font-semibold border-2 border-white">
-                              +{task.assignedTo.length - 3}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
                   </div>
 
                   {/* Quick Status Update */}
