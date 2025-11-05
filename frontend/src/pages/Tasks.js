@@ -25,8 +25,7 @@ const Tasks = () => {
   const [showModal, setShowModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
 
-  // ✅ Vue sélectionnée
-  const [taskView, setTaskView] = useState("all");
+  const [taskView, setTaskView] = useState("all"); // ✅ Vue sélectionnée
 
   const [filters, setFilters] = useState({
     projectId: "",
@@ -51,20 +50,14 @@ const Tasks = () => {
 
   const loadData = async () => {
     try {
-      let query = { ...filters };
-
-      // ✅ Envoyer filterType au backend selon taskView
-      if (taskView === "assigned") query.filterType = "assignedToMe";
-      if (taskView === "created_not_assigned") query.filterType = "createdByMeNotAssignedToMe";
-      // "all" => pas de filterType, on laisse vide
-
       let tasksRes = isOverdueMode
         ? await tasksAPI.getOverdue()
-        : await tasksAPI.getAll(query);
+        : await tasksAPI.getAll(filters);
 
       const projectsRes = await projectsAPI.getAll();
       let fetchedTasks = tasksRes.data.data;
 
+      // ✅ Tri
       fetchedTasks = fetchedTasks.sort((a, b) => {
         const dateA = a.dueDate ? new Date(a.dueDate) : null;
         const dateB = b.dueDate ? new Date(b.dueDate) : null;
@@ -104,13 +97,30 @@ const Tasks = () => {
     }
   };
 
+  // ✅ FILTRAGE LOCAL (et correct maintenant)
+  let visibleTasks = tasks;
+
+  if (taskView === "assigned") {
+    visibleTasks = visibleTasks.filter((t) =>
+      t.assignedTo?.some((u) => u._id === user._id)
+    );
+  }
+
+  if (taskView === "created_not_assigned") {
+    visibleTasks = visibleTasks.filter(
+      (t) =>
+        t.createdBy?._id === user._id &&
+        !t.assignedTo?.some((u) => u._id === user._id)
+    );
+  }
+
   const getPriorityColor = (priority) =>
     ({
       low: "bg-blue-100 text-blue-800",
       medium: "bg-yellow-100 text-yellow-800",
       high: "bg-orange-100 text-orange-800",
       urgent: "bg-red-100 text-red-800",
-    }[priority] || "bg-yellow-100 text-yellow-800");
+    }[priority] || "bg-gray-100 text-gray-800");
 
   const getStatusColor = (status) =>
     ({
@@ -193,14 +203,14 @@ const Tasks = () => {
         </div>
       )}
 
-      {tasks.length === 0 ? (
+      {visibleTasks.length === 0 ? (
         <div className="card text-center py-12">
           <CheckSquare className="w-16 h-16 mx-auto mb-4 text-gray-300" />
           <h3 className="text-lg font-medium">Aucune tâche</h3>
         </div>
       ) : (
         <div className="space-y-4">
-          {tasks.map((task) => {
+          {visibleTasks.map((task) => {
             const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "completed";
 
             return (
