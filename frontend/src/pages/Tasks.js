@@ -49,7 +49,22 @@ const Tasks = () => {
         : await tasksAPI.getAll(filters);
 
       const projectsRes = await projectsAPI.getAll();
-      setTasks(tasksRes.data.data);
+
+      let fetchedTasks = tasksRes.data.data;
+
+      // ✅ Tri par date d'échéance PUIS alphabétique
+      fetchedTasks = fetchedTasks.sort((a, b) => {
+        const dateA = a.dueDate ? new Date(a.dueDate) : null;
+        const dateB = b.dueDate ? new Date(b.dueDate) : null;
+
+        if (dateA && dateB) return dateA - dateB;
+        if (dateA && !dateB) return -1;
+        if (!dateA && dateB) return 1;
+
+        return a.title.localeCompare(b.title, "fr", { sensitivity: "base" });
+      });
+
+      setTasks(fetchedTasks);
       setProjects(projectsRes.data.data);
     } catch (error) {
       toast.error("Erreur lors du chargement des tâches");
@@ -79,24 +94,27 @@ const Tasks = () => {
     }
   };
 
-  const getPriorityColor = (priority) => ({
-    low: "bg-blue-100 text-blue-800",
-    medium: "bg-yellow-100 text-yellow-800",
-    high: "bg-orange-100 text-orange-800",
-    urgent: "bg-red-100 text-red-800",
-  }[priority] || "bg-yellow-100 text-yellow-800");
+  const getPriorityColor = (priority) =>
+    ({
+      low: "bg-blue-100 text-blue-800",
+      medium: "bg-yellow-100 text-yellow-800",
+      high: "bg-orange-100 text-orange-800",
+      urgent: "bg-red-100 text-red-800",
+    }[priority] || "bg-yellow-100 text-yellow-800");
 
-  const getStatusColor = (status) => ({
-    not_started: "bg-gray-100 text-gray-800",
-    in_progress: "bg-blue-100 text-blue-800",
-    completed: "bg-green-100 text-green-800",
-  }[status] || "bg-gray-100 text-gray-800");
+  const getStatusColor = (status) =>
+    ({
+      not_started: "bg-gray-100 text-gray-800",
+      in_progress: "bg-blue-100 text-blue-800",
+      completed: "bg-green-100 text-green-800",
+    }[status] || "bg-gray-100 text-gray-800");
 
-  const getStatusLabel = (status) => ({
-    not_started: "Non démarrée",
-    in_progress: "En cours",
-    completed: "Terminée",
-  }[status] || status);
+  const getStatusLabel = (status) =>
+    ({
+      not_started: "Non démarrée",
+      in_progress: "En cours",
+      completed: "Terminée",
+    }[status] || status);
 
   if (loading) return <Loading fullScreen={false} />;
 
@@ -170,13 +188,11 @@ const Tasks = () => {
                     <h3 className="text-lg font-bold">{task.title}</h3>
                     <p className="text-sm text-gray-600">{task.project?.name}</p>
 
-                    {/* ✅ Personnes assignées */}
                     {task.assignedTo && task.assignedTo.length > 0 && (
                       <div className="flex items-center flex-wrap gap-2 mt-2">
                         {task.assignedTo.map((user) => (
                           <span key={user._id} className="w-7 h-7 flex items-center justify-center rounded-full bg-purple-100 text-purple-800 text-xs font-semibold">
-                            {user.firstName[0]}
-                            {user.lastName[0]}
+                            {user.firstName[0]}{user.lastName[0]}
                           </span>
                         ))}
                       </div>
