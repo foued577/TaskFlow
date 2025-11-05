@@ -95,59 +95,65 @@ exports.createTask = async (req, res) => {
   }
 };
 
+// ✅✅ NEW GET TASKS FUNCTION WITH ALL FILTERS ADDED ✅✅
 // @desc    Get tasks
 // @route   GET /api/tasks
 // @access  Private
 exports.getTasks = async (req, res) => {
   try {
-    const { projectId, status, assignedTo, priority, dueDate } = req.query;
+    const { projectId, status, priority, assignedTo, createdBy, notAssignedToMe } = req.query;
 
     let query = {};
 
-    if (projectId) {
-      query.project = projectId;
-    } else {
-      // Get all projects from user's teams
-      const teams = await Team.find({ 'members.user': req.user.id });
-      const teamIds = teams.map(t => t._id);
-      const projects = await Project.find({ team: { $in: teamIds } });
-      const projectIds = projects.map(p => p._id);
-      query.project = { $in: projectIds };
-    }
+    // Get all projects of user's teams
+    const teams = await Team.find({ 'members.user': req.user.id });
+    const teamIds = teams.map(t => t._id);
+    const projects = await Project.find({ team: { $in: teamIds } });
+    const projectIds = projects.map(p => p._id);
+
+    // Default: tasks in all accessible projects
+    query.project = projectId ? projectId : { $in: projectIds };
 
     if (status) query.status = status;
-    if (assignedTo) query.assignedTo = assignedTo;
     if (priority) query.priority = priority;
-    if (dueDate) {
-      const date = new Date(dueDate);
-      query.dueDate = {
-        $gte: new Date(date.setHours(0, 0, 0, 0)),
-        $lt: new Date(date.setHours(23, 59, 59, 999))
-      };
+
+    // Filtrer "tâches où je suis assigné"
+    if (assignedTo) query.assignedTo = assignedTo;
+
+    // Filtrer "tâches créées par moi"
+    if (createdBy) query.createdBy = createdBy;
+
+    // ✅ Filtrer "créées par moi mais non assignées à moi"
+    if (notAssignedToMe === "true") {
+      query.createdBy = req.user.id;
+      query.assignedTo = { $ne: req.user.id };
     }
 
-    // Only parent tasks (no subtasks in main list)
+    // Only parent tasks (no subtasks)
     query.parentTask = null;
 
     const tasks = await Task.find(query)
-      .populate('assignedTo', 'firstName lastName email avatar')
-      .populate('createdBy', 'firstName lastName')
-      .populate('project', 'name color team')
-      .sort('-createdAt');
+      .populate("assignedTo", "firstName lastName email avatar")
+      .populate("createdBy", "firstName lastName")
+      .populate("project", "name color team")
+      .sort("-createdAt");
 
     res.status(200).json({
       success: true,
       count: tasks.length,
       data: tasks
     });
+
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: 'Error fetching tasks',
+      message: "Error fetching tasks",
       error: error.message
     });
   }
 };
+
+
 
 // @desc    Get single task
 // @route   GET /api/tasks/:id
