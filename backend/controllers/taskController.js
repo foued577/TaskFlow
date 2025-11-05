@@ -18,7 +18,6 @@ exports.createTask = async (req, res) => {
       });
     }
 
-    // Verify project and authorization
     const project = await Project.findById(projectId).populate('team');
     if (!project) {
       return res.status(404).json({
@@ -50,7 +49,6 @@ exports.createTask = async (req, res) => {
       createdBy: req.user.id
     });
 
-    // Create history entry
     await History.create({
       user: req.user.id,
       action: 'created',
@@ -60,7 +58,6 @@ exports.createTask = async (req, res) => {
       project: projectId
     });
 
-    // Notify assigned users
     if (assignedTo && assignedTo.length > 0) {
       for (const userId of assignedTo) {
         if (userId !== req.user.id) {
@@ -95,38 +92,39 @@ exports.createTask = async (req, res) => {
   }
 };
 
-// @desc    Get tasks
-// @route   GET /api/tasks
-// @access  Private
+// ✅✅ MODIFIED GET TASKS FUNCTION (INCLUDES NEW FILTERS)
 exports.getTasks = async (req, res) => {
   try {
-    const { projectId, status, assignedTo, priority, dueDate } = req.query;
+    const { projectId, status, priority, filterType } = req.query;
 
     let query = {};
 
-    if (projectId) {
-      query.project = projectId;
-    } else {
-      // Get all projects from user's teams
-      const teams = await Team.find({ 'members.user': req.user.id });
-      const teamIds = teams.map(t => t._id);
-      const projects = await Project.find({ team: { $in: teamIds } });
-      const projectIds = projects.map(p => p._id);
-      query.project = { $in: projectIds };
-    }
+    const teams = await Team.find({ 'members.user': req.user.id });
+    const teamIds = teams.map(t => t._id);
+    const projects = await Project.find({ team: { $in: teamIds } });
+    const projectIds = projects.map(p => p._id);
+
+    query.project = projectId ? projectId : { $in: projectIds };
 
     if (status) query.status = status;
-    if (assignedTo) query.assignedTo = assignedTo;
     if (priority) query.priority = priority;
-    if (dueDate) {
-      const date = new Date(dueDate);
-      query.dueDate = {
-        $gte: new Date(date.setHours(0, 0, 0, 0)),
-        $lt: new Date(date.setHours(23, 59, 59, 999))
-      };
+
+    // 🔵 Tâches où JE SUIS assigné
+    if (filterType === "assignedToMe") {
+      query.assignedTo = req.user.id;
     }
 
-    // Only parent tasks (no subtasks in main list)
+    // 🟢 Tâches CRÉÉES par moi
+    if (filterType === "createdByMe") {
+      query.createdBy = req.user.id;
+    }
+
+    // 🟡 Tâches CRÉÉES par moi mais NON assignées à moi
+    if (filterType === "createdByMeNotAssignedToMe") {
+      query.createdBy = req.user.id;
+      query.assignedTo = { $ne: req.user.id };
+    }
+
     query.parentTask = null;
 
     const tasks = await Task.find(query)
@@ -140,6 +138,7 @@ exports.getTasks = async (req, res) => {
       count: tasks.length,
       data: tasks
     });
+
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -169,7 +168,6 @@ exports.getTask = async (req, res) => {
       });
     }
 
-    // Check authorization
     const project = await Project.findById(task.project).populate('team');
     const team = await Team.findById(project.team);
     const isMember = team.members.some(m => m.user.toString() === req.user.id);
@@ -210,23 +208,19 @@ exports.updateTask = async (req, res) => {
     const oldStatus = task.status;
     const oldAssignedTo = task.assignedTo.map(id => id.toString());
 
-    // Update fields
     const updatableFields = ['title', 'description', 'status', 'priority', 'estimatedHours', 'startDate', 'dueDate', 'tags', 'assignedTo'];
-    
     updatableFields.forEach(field => {
       if (req.body[field] !== undefined) {
         task[field] = req.body[field];
       }
     });
 
-    // If status changed to completed
     if (req.body.status === 'completed' && oldStatus !== 'completed') {
       task.completedAt = new Date();
     }
 
     await task.save();
 
-    // Create history entry
     await History.create({
       user: req.user.id,
       action: 'updated',
@@ -236,7 +230,6 @@ exports.updateTask = async (req, res) => {
       project: task.project
     });
 
-    // Notify on status change
     if (oldStatus !== task.status) {
       const assignedUsers = task.assignedTo.filter(id => id.toString() !== req.user.id);
       for (const userId of assignedUsers) {
@@ -252,7 +245,6 @@ exports.updateTask = async (req, res) => {
       }
     }
 
-    // Notify newly assigned users
     if (req.body.assignedTo) {
       const newAssignees = task.assignedTo.filter(id => !oldAssignedTo.includes(id.toString()));
       for (const userId of newAssignees) {
@@ -332,7 +324,6 @@ exports.addSubtask = async (req, res) => {
     }
 
     const task = await Task.findById(req.params.id);
-
     if (!task) {
       return res.status(404).json({
         success: false,
@@ -362,7 +353,6 @@ exports.addSubtask = async (req, res) => {
 exports.toggleSubtask = async (req, res) => {
   try {
     const task = await Task.findById(req.params.id);
-
     if (!task) {
       return res.status(404).json({
         success: false,
@@ -434,7 +424,6 @@ exports.uploadAttachment = async (req, res) => {
 
     await task.save();
 
-    // Create history entry
     await History.create({
       user: req.user.id,
       action: 'attached_file',
