@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
+import { useAuth } from "../context/AuthContext"; // ✅ AJOUT
 import { tasksAPI, projectsAPI } from "../utils/api";
 import { toast } from "react-toastify";
 import {
@@ -16,17 +17,22 @@ import { fr } from "date-fns/locale";
 
 const Tasks = () => {
   const location = useLocation();
+  const { user } = useAuth(); // ✅ AJOUT
 
   const [tasks, setTasks] = useState([]);
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
+
+  const [taskView, setTaskView] = useState("all"); // ✅ AJOUT
+
   const [filters, setFilters] = useState({
     projectId: "",
     status: "",
     priority: "",
   });
+
   const [isOverdueMode, setIsOverdueMode] = useState(false);
 
   useEffect(() => {
@@ -49,18 +55,14 @@ const Tasks = () => {
         : await tasksAPI.getAll(filters);
 
       const projectsRes = await projectsAPI.getAll();
-
       let fetchedTasks = tasksRes.data.data;
 
-      // ✅ Tri par date d'échéance PUIS alphabétique
       fetchedTasks = fetchedTasks.sort((a, b) => {
         const dateA = a.dueDate ? new Date(a.dueDate) : null;
         const dateB = b.dueDate ? new Date(b.dueDate) : null;
-
         if (dateA && dateB) return dateA - dateB;
         if (dateA && !dateB) return -1;
         if (!dateA && dateB) return 1;
-
         return a.title.localeCompare(b.title, "fr", { sensitivity: "base" });
       });
 
@@ -94,6 +96,21 @@ const Tasks = () => {
     }
   };
 
+  // ✅ FILTRAGE des tâches selon taskView
+  let visibleTasks = tasks;
+
+  if (taskView === "assigned") {
+    visibleTasks = tasks.filter((t) =>
+      t.assignedTo?.some((u) => u._id === user.id)
+    );
+  }
+
+  if (taskView === "created_not_assigned") {
+    visibleTasks = tasks.filter(
+      (t) => t.createdBy?._id === user.id && !t.assignedTo?.some((u) => u._id === user.id)
+    );
+  }
+
   const getPriorityColor = (priority) =>
     ({
       low: "bg-blue-100 text-blue-800",
@@ -120,7 +137,6 @@ const Tasks = () => {
 
   return (
     <div>
-
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">
           {isOverdueMode ? "Tâches en retard" : "Tâches"}
@@ -131,12 +147,26 @@ const Tasks = () => {
       </div>
 
       {!isOverdueMode && (
-        <div className="card mb-6">
+        <div className="card mb-6 p-4">
           <div className="flex items-center mb-4">
             <Filter className="w-5 h-5 mr-2 text-gray-600" />
             <h3 className="text-lg font-semibold text-gray-900">Filtres</h3>
           </div>
 
+          {/* ✅ BOUTONS DE FILTRAGE */}
+          <div className="flex gap-2 mb-4">
+            <button className={`btn ${taskView === "all" ? "btn-primary" : "btn-light"}`} onClick={() => setTaskView("all")}>
+              Toutes les tâches
+            </button>
+            <button className={`btn ${taskView === "assigned" ? "btn-primary" : "btn-light"}`} onClick={() => setTaskView("assigned")}>
+              Tâches où je suis assigné
+            </button>
+            <button className={`btn ${taskView === "created_not_assigned" ? "btn-primary" : "btn-light"}`} onClick={() => setTaskView("created_not_assigned")}>
+              Créées par moi mais non assignées à moi
+            </button>
+          </div>
+
+          {/* Filtres originaux */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm mb-2">Projet</label>
@@ -170,14 +200,14 @@ const Tasks = () => {
         </div>
       )}
 
-      {tasks.length === 0 ? (
+      {visibleTasks.length === 0 ? (
         <div className="card text-center py-12">
           <CheckSquare className="w-16 h-16 mx-auto mb-4 text-gray-300" />
           <h3 className="text-lg font-medium">Aucune tâche</h3>
         </div>
       ) : (
         <div className="space-y-4">
-          {tasks.map((task) => {
+          {visibleTasks.map((task) => {
             const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "completed";
 
             return (
