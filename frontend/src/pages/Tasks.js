@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
-import { useAuth } from "../context/AuthContext"; // ✅ AJOUT
+import { useAuth } from "../context/AuthContext";
 import { tasksAPI, projectsAPI } from "../utils/api";
 import { toast } from "react-toastify";
 import {
@@ -17,7 +17,7 @@ import { fr } from "date-fns/locale";
 
 const Tasks = () => {
   const location = useLocation();
-  const { user } = useAuth(); // ✅ AJOUT
+  const { user } = useAuth();
 
   const [tasks, setTasks] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -25,7 +25,8 @@ const Tasks = () => {
   const [showModal, setShowModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
 
-  const [taskView, setTaskView] = useState("all"); // ✅ AJOUT
+  // ✅ Vue sélectionnée
+  const [taskView, setTaskView] = useState("all");
 
   const [filters, setFilters] = useState({
     projectId: "",
@@ -46,13 +47,20 @@ const Tasks = () => {
 
   useEffect(() => {
     loadData();
-  }, [filters, isOverdueMode]);
+  }, [filters, isOverdueMode, taskView]);
 
   const loadData = async () => {
     try {
+      let query = { ...filters };
+
+      // ✅ Envoyer filterType au backend selon taskView
+      if (taskView === "assigned") query.filterType = "assignedToMe";
+      if (taskView === "created_not_assigned") query.filterType = "createdByMeNotAssignedToMe";
+      // "all" => pas de filterType, on laisse vide
+
       let tasksRes = isOverdueMode
         ? await tasksAPI.getOverdue()
-        : await tasksAPI.getAll(filters);
+        : await tasksAPI.getAll(query);
 
       const projectsRes = await projectsAPI.getAll();
       let fetchedTasks = tasksRes.data.data;
@@ -96,21 +104,6 @@ const Tasks = () => {
     }
   };
 
-  // ✅ FILTRAGE des tâches selon taskView
-  let visibleTasks = tasks;
-
-  if (taskView === "assigned") {
-    visibleTasks = tasks.filter((t) =>
-      t.assignedTo?.some((u) => u._id === user.id)
-    );
-  }
-
-  if (taskView === "created_not_assigned") {
-    visibleTasks = tasks.filter(
-      (t) => t.createdBy?._id === user.id && !t.assignedTo?.some((u) => u._id === user.id)
-    );
-  }
-
   const getPriorityColor = (priority) =>
     ({
       low: "bg-blue-100 text-blue-800",
@@ -153,7 +146,7 @@ const Tasks = () => {
             <h3 className="text-lg font-semibold text-gray-900">Filtres</h3>
           </div>
 
-          {/* ✅ BOUTONS DE FILTRAGE */}
+          {/* ✅ Boutons de vue */}
           <div className="flex gap-2 mb-4">
             <button className={`btn ${taskView === "all" ? "btn-primary" : "btn-light"}`} onClick={() => setTaskView("all")}>
               Toutes les tâches
@@ -166,7 +159,7 @@ const Tasks = () => {
             </button>
           </div>
 
-          {/* Filtres originaux */}
+          {/* Filtres classiques */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm mb-2">Projet</label>
@@ -200,14 +193,14 @@ const Tasks = () => {
         </div>
       )}
 
-      {visibleTasks.length === 0 ? (
+      {tasks.length === 0 ? (
         <div className="card text-center py-12">
           <CheckSquare className="w-16 h-16 mx-auto mb-4 text-gray-300" />
           <h3 className="text-lg font-medium">Aucune tâche</h3>
         </div>
       ) : (
         <div className="space-y-4">
-          {visibleTasks.map((task) => {
+          {tasks.map((task) => {
             const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "completed";
 
             return (
