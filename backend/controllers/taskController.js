@@ -73,7 +73,7 @@ exports.createTask = async (req, res) => {
   }
 };
 
-// ✅ Corrected GET TASKS (all filters working)
+// ✅ FIXED & STABLE GET TASKS FUNCTION
 exports.getTasks = async (req, res) => {
   try {
     const { projectId, status, priority, filterType, assignedUser } = req.query;
@@ -89,16 +89,24 @@ exports.getTasks = async (req, res) => {
     if (status) query.status = status;
     if (priority) query.priority = priority;
 
-    if (filterType === "assignedToMe") query.assignedTo = req.user.id;
-    if (filterType === "createdByMe") query.createdBy = req.user.id;
+    // ✅ Tâches où JE suis assigné
+    if (filterType === "assignedToMe") {
+      query.assignedTo = { $in: [req.user.id] };
+    }
+
+    // ✅ Tâches créées par moi
+    if (filterType === "createdByMe") {
+      query.createdBy = req.user.id;
+    }
+
+    // ✅ Tâches créées par moi mais NON assignées à moi
     if (filterType === "createdByMeNotAssignedToMe") {
       query.createdBy = req.user.id;
       query.assignedTo = { $ne: req.user.id };
     }
 
-    if (assignedUser) {
-      query.assignedTo = assignedUser;
-    }
+    // ✅ Filtre direct sur un utilisateur assigné précis
+    if (assignedUser) query.assignedTo = { $in: [assignedUser] };
 
     const tasks = await Task.find(query)
       .populate('assignedTo', 'firstName lastName email avatar')
