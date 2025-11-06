@@ -143,19 +143,17 @@ exports.updateTask = async (req, res) => {
     const task = await Task.findById(req.params.id);
     if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
 
-    const oldAssignedTo = task.assignedTo.map(id => id.toString());
-
     const fields = ['title', 'description', 'status', 'priority', 'estimatedHours', 'startDate', 'dueDate', 'tags', 'assignedTo'];
     fields.forEach(f => { if (req.body[f] !== undefined) task[f] = req.body[f]; });
 
     await task.save();
 
-    const newTask = await Task.findById(task._id)
+    const updatedTask = await Task.findById(task._id)
       .populate('assignedTo', 'firstName lastName email avatar')
       .populate('createdBy', 'firstName lastName')
       .populate('project', 'name color');
 
-    res.status(200).json({ success: true, data: newTask });
+    res.status(200).json({ success: true, data: updatedTask });
 
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error updating task', error: error.message });
@@ -198,14 +196,4 @@ exports.getOverdueTasks = async (req, res) => {
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error fetching overdue tasks', error: error.message });
   }
-};
-
-// ✅✅✅ VERY IMPORTANT: EXPORT ALL FUNCTIONS
-module.exports = {
-  createTask,
-  getTasks,
-  getTask,
-  updateTask,
-  deleteTask,
-  getOverdueTasks
 };
