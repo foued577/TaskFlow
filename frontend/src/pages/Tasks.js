@@ -44,22 +44,20 @@ const Tasks = () => {
 
   const loadData = async () => {
     try {
-      let filterType = "";
+      let query = { ...filters };
 
-      if (taskView === "assigned") filterType = "assignedToMe";
-      if (taskView === "created_not_assigned") filterType = "createdByMeNotAssignedToMe";
+      // ✅ ENVOI DU BON FILTRE AU BACKEND
+      if (taskView === "assigned") query.filterType = "assignedToMe";
+      if (taskView === "created_not_assigned") query.filterType = "createdByMeNotAssignedToMe";
+      // Vue normale = pas de filterType envoyé
 
       let tasksRes = isOverdueMode
         ? await tasksAPI.getOverdue()
-        : await tasksAPI.getAll({
-            ...filters,
-            filterType, // ✅ ENVOI AU BACKEND
-          });
+        : await tasksAPI.getAll(query);
 
       const projectsRes = await projectsAPI.getAll();
       let fetchedTasks = tasksRes.data.data;
 
-      // ✅ Tri intelligent
       fetchedTasks = fetchedTasks.sort((a, b) => {
         const dateA = a.dueDate ? new Date(a.dueDate) : null;
         const dateB = b.dueDate ? new Date(b.dueDate) : null;
@@ -71,7 +69,7 @@ const Tasks = () => {
 
       setTasks(fetchedTasks);
       setProjects(projectsRes.data.data);
-    } catch (error) {
+    } catch {
       toast.error("Erreur lors du chargement des tâches");
     } finally {
       setLoading(false);
@@ -129,13 +127,7 @@ const Tasks = () => {
         <h1 className="text-2xl font-bold text-gray-900">
           {isOverdueMode ? "Tâches en retard" : "Tâches"}
         </h1>
-        <button
-          onClick={() => {
-            setSelectedTask(null);
-            setShowModal(true);
-          }}
-          className="btn btn-primary flex items-center"
-        >
+        <button onClick={() => { setSelectedTask(null); setShowModal(true); }} className="btn btn-primary flex items-center">
           <Plus className="w-5 h-5 mr-2" /> Nouvelle tâche
         </button>
       </div>
@@ -164,11 +156,7 @@ const Tasks = () => {
               <label className="block text-sm mb-2">Projet</label>
               <select value={filters.projectId} onChange={(e) => setFilters({ ...filters, projectId: e.target.value })} className="input">
                 <option value="">Tous les projets</option>
-                {projects.map((p) => (
-                  <option key={p._id} value={p._id}>
-                    {p.name}
-                  </option>
-                ))}
+                {projects.map((p) => <option key={p._id} value={p._id}>{p.name}</option>)}
               </select>
             </div>
 
@@ -214,12 +202,11 @@ const Tasks = () => {
                     <h3 className="text-lg font-bold">{task.title}</h3>
                     <p className="text-sm text-gray-600">{task.project?.name}</p>
 
-                    {task.assignedTo?.length > 0 && (
+                    {task.assignedTo && task.assignedTo.length > 0 && (
                       <div className="flex items-center flex-wrap gap-2 mt-2">
                         {task.assignedTo.map((user) => (
                           <span key={user._id} className="w-7 h-7 flex items-center justify-center rounded-full bg-purple-100 text-purple-800 text-xs font-semibold">
-                            {user.firstName[0]}
-                            {user.lastName[0]}
+                            {user.firstName[0]}{user.lastName[0]}
                           </span>
                         ))}
                       </div>
@@ -239,12 +226,7 @@ const Tasks = () => {
                     </div>
                   </div>
 
-                  <select
-                    value={task.status}
-                    onChange={(e) => updateTaskStatus(task._id, e.target.value)}
-                    onClick={(e) => e.stopPropagation()}
-                    className="text-sm border rounded-lg px-2 py-1"
-                  >
+                  <select value={task.status} onChange={(e) => updateTaskStatus(task._id, e.target.value)} onClick={(e) => e.stopPropagation()} className="text-sm border rounded-lg px-2 py-1">
                     <option value="not_started">Non démarrée</option>
                     <option value="in_progress">En cours</option>
                     <option value="completed">Terminée</option>
@@ -261,10 +243,7 @@ const Tasks = () => {
         <TaskModal
           task={selectedTask}
           projects={projects}
-          onClose={() => {
-            setShowModal(false);
-            setSelectedTask(null);
-          }}
+          onClose={() => { setShowModal(false); setSelectedTask(null); }}
           onSave={handleTaskUpdate}
         />
       )}
