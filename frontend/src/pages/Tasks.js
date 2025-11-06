@@ -46,10 +46,8 @@ const Tasks = () => {
     try {
       let query = { ...filters };
 
-      // ✅ ENVOI DU BON FILTRE AU BACKEND
       if (taskView === "assigned") query.filterType = "assignedToMe";
       if (taskView === "created_not_assigned") query.filterType = "createdByMeNotAssignedToMe";
-      // Vue normale = pas de filterType envoyé
 
       let tasksRes = isOverdueMode
         ? await tasksAPI.getOverdue()
@@ -119,6 +117,23 @@ const Tasks = () => {
       completed: "Terminée",
     }[status] || status);
 
+  // ✅ Construction de la liste affichée (filtrage local final)
+  let visibleTasks = tasks;
+
+  if (taskView === "assigned") {
+    visibleTasks = visibleTasks.filter((t) =>
+      t.assignedTo?.some((u) => u._id === user._id)
+    );
+  }
+
+  if (taskView === "created_not_assigned") {
+    visibleTasks = visibleTasks.filter(
+      (t) =>
+        t.createdBy?._id === user._id &&
+        !t.assignedTo?.some((u) => u._id === user._id)
+    );
+  }
+
   if (loading) return <Loading fullScreen={false} />;
 
   return (
@@ -147,7 +162,7 @@ const Tasks = () => {
               Tâches où je suis assigné
             </button>
             <button className={`btn ${taskView === "created_not_assigned" ? "btn-primary" : "btn-light"}`} onClick={() => setTaskView("created_not_assigned")}>
-              Créées par moi mais non assignées à moi
+              Créées par moi mais non assignées
             </button>
           </div>
 
@@ -184,14 +199,14 @@ const Tasks = () => {
         </div>
       )}
 
-      {tasks.length === 0 ? (
+      {visibleTasks.length === 0 ? (
         <div className="card text-center py-12">
           <CheckSquare className="w-16 h-16 mx-auto mb-4 text-gray-300" />
           <h3 className="text-lg font-medium">Aucune tâche</h3>
         </div>
       ) : (
         <div className="space-y-4">
-          {tasks.map((task) => {
+          {visibleTasks.map((task) => {
             const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "completed";
 
             return (
