@@ -10,9 +10,11 @@ const Projects = () => {
   const [projects, setProjects] = useState([]);
   const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
+
   const [showModal, setShowModal] = useState(false);
   const [modalMode, setModalMode] = useState('create');
   const [selectedProject, setSelectedProject] = useState(null);
+
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -35,9 +37,9 @@ const Projects = () => {
         teamsAPI.getAll(),
       ]);
 
-      // ✅ Tri alphabétique A → Z
+      // ✅ TRI ALPHABETIQUE A → Z
       const sortedProjects = projectsRes.data.data.sort((a, b) =>
-        a.name.localeCompare(b.name, "fr", { sensitivity: "base" })
+        a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' })
       );
 
       setProjects(sortedProjects);
@@ -51,6 +53,7 @@ const Projects = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
     try {
       const data = {
         ...formData,
@@ -68,6 +71,7 @@ const Projects = () => {
       setShowModal(false);
       resetForm();
       loadData();
+
     } catch (error) {
       toast.error(error.response?.data?.message || 'Une erreur est survenue');
     }
@@ -89,6 +93,7 @@ const Projects = () => {
   const openCreateModal = () => {
     setModalMode('create');
     resetForm();
+    setSelectedProject(null);
     setShowModal(true);
   };
 
@@ -137,8 +142,7 @@ const Projects = () => {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Projets</h1>
         <button onClick={openCreateModal} className="btn btn-primary flex items-center">
-          <Plus className="w-5 h-5 mr-2" />
-          Nouveau projet
+          <Plus className="w-5 h-5 mr-2" /> Nouveau projet
         </button>
       </div>
 
@@ -157,26 +161,18 @@ const Projects = () => {
             <div key={project._id} className="card hover:shadow-lg transition-shadow">
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center">
-                  <div
-                    className="w-3 h-12 rounded-l-lg mr-3"
-                    style={{ backgroundColor: project.color }}
-                  />
+                  <div className="w-3 h-12 rounded-l-lg mr-3" style={{ backgroundColor: project.color }} />
                   <div>
                     <h3 className="text-lg font-bold text-gray-900">{project.name}</h3>
                     <p className="text-sm text-gray-500">{project.team?.name}</p>
                   </div>
                 </div>
+
                 <div className="flex space-x-1">
-                  <button
-                    onClick={() => openEditModal(project)}
-                    className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
-                  >
+                  <button onClick={() => openEditModal(project)} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100">
                     <Edit2 className="w-4 h-4" />
                   </button>
-                  <button
-                    onClick={() => deleteProject(project._id)}
-                    className="p-2 text-red-400 hover:text-red-600 rounded-lg hover:bg-red-50"
-                  >
+                  <button onClick={() => deleteProject(project._id)} className="p-2 text-red-400 hover:text-red-600 rounded-lg hover:bg-red-50">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -190,9 +186,10 @@ const Projects = () => {
                 <span className={`badge ${getPriorityColor(project.priority)}`}>
                   {project.priority}
                 </span>
-                <span className={`badge ${
-                  project.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                }`}>
+                <span className={`badge ${project.status === 'active'
+                    ? 'bg-green-100 text-green-800'
+                    : 'bg-gray-100 text-gray-800'
+                  }`}>
                   {project.status}
                 </span>
               </div>
@@ -222,6 +219,7 @@ const Projects = () => {
         </div>
       )}
 
+      {/* Create/Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
@@ -235,18 +233,64 @@ const Projects = () => {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Nom du projet</label>
+                <input type="text" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="input" required />
+              </div>
 
-              {/* Les champs du formulaire restent identiques */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Équipe</label>
+                <select value={formData.teamId} onChange={(e) => setFormData({ ...formData, teamId: e.target.value })} className="input" required>
+                  <option value="">Sélectionner une équipe</option>
+                  {teams.map((team) => (
+                    <option key={team._id} value={team._id}>{team.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                <textarea value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} className="input" rows={3} />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Date de début</label>
+                  <input type="date" value={formData.startDate} onChange={(e) => setFormData({ ...formData, startDate: e.target.value })} className="input" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Date de fin</label>
+                  <input type="date" value={formData.endDate} onChange={(e) => setFormData({ ...formData, endDate: e.target.value })} className="input" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Priorité</label>
+                  <select value={formData.priority} onChange={(e) => setFormData({ ...formData, priority: e.target.value })} className="input">
+                    <option value="low">Basse</option>
+                    <option value="medium">Moyenne</option>
+                    <option value="high">Haute</option>
+                    <option value="urgent">Urgente</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Couleur</label>
+                  <input type="color" value={formData.color} onChange={(e) => setFormData({ ...formData, color: e.target.value })} className="w-full h-10 rounded-lg border border-gray-300 cursor-pointer" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Tags (séparés par des virgules)</label>
+                <input type="text" value={formData.tags} onChange={(e) => setFormData({ ...formData, tags: e.target.value })} className="input" placeholder="frontend, backend, design" />
+              </div>
 
               <div className="flex space-x-3 pt-4">
                 <button type="submit" className="flex-1 btn btn-primary">
                   {modalMode === 'create' ? 'Créer' : 'Mettre à jour'}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="flex-1 btn btn-secondary"
-                >
+                <button type="button" onClick={() => setShowModal(false)} className="flex-1 btn btn-secondary">
                   Annuler
                 </button>
               </div>
