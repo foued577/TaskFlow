@@ -3,13 +3,7 @@ import { useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { tasksAPI, projectsAPI } from "../utils/api";
 import { toast } from "react-toastify";
-import {
-  CheckSquare,
-  Plus,
-  Filter,
-  Calendar as CalendarIcon,
-  AlertCircle,
-} from "lucide-react";
+import { CheckSquare, Plus, Filter, Calendar as CalendarIcon, AlertCircle } from "lucide-react";
 import Loading from "../components/Loading";
 import TaskModal from "../components/TaskModal";
 import { format } from "date-fns";
@@ -25,7 +19,7 @@ const Tasks = () => {
   const [showModal, setShowModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
 
-  const [taskView, setTaskView] = useState("all"); // ✅ Vue sélectionnée
+  const [taskView, setTaskView] = useState("all");
 
   const [filters, setFilters] = useState({
     projectId: "",
@@ -50,14 +44,22 @@ const Tasks = () => {
 
   const loadData = async () => {
     try {
+      let filterType = "";
+
+      if (taskView === "assigned") filterType = "assignedToMe";
+      if (taskView === "created_not_assigned") filterType = "createdByMeNotAssignedToMe";
+
       let tasksRes = isOverdueMode
         ? await tasksAPI.getOverdue()
-        : await tasksAPI.getAll(filters);
+        : await tasksAPI.getAll({
+            ...filters,
+            filterType, // ✅ ENVOI AU BACKEND
+          });
 
       const projectsRes = await projectsAPI.getAll();
       let fetchedTasks = tasksRes.data.data;
 
-      // ✅ Tri
+      // ✅ Tri intelligent
       fetchedTasks = fetchedTasks.sort((a, b) => {
         const dateA = a.dueDate ? new Date(a.dueDate) : null;
         const dateB = b.dueDate ? new Date(b.dueDate) : null;
@@ -97,23 +99,6 @@ const Tasks = () => {
     }
   };
 
-  // ✅ FILTRAGE LOCAL (et correct maintenant)
-  let visibleTasks = tasks;
-
-  if (taskView === "assigned") {
-    visibleTasks = visibleTasks.filter((t) =>
-      t.assignedTo?.some((u) => u._id === user._id)
-    );
-  }
-
-  if (taskView === "created_not_assigned") {
-    visibleTasks = visibleTasks.filter(
-      (t) =>
-        t.createdBy?._id === user._id &&
-        !t.assignedTo?.some((u) => u._id === user._id)
-    );
-  }
-
   const getPriorityColor = (priority) =>
     ({
       low: "bg-blue-100 text-blue-800",
@@ -144,7 +129,13 @@ const Tasks = () => {
         <h1 className="text-2xl font-bold text-gray-900">
           {isOverdueMode ? "Tâches en retard" : "Tâches"}
         </h1>
-        <button onClick={() => { setSelectedTask(null); setShowModal(true); }} className="btn btn-primary flex items-center">
+        <button
+          onClick={() => {
+            setSelectedTask(null);
+            setShowModal(true);
+          }}
+          className="btn btn-primary flex items-center"
+        >
           <Plus className="w-5 h-5 mr-2" /> Nouvelle tâche
         </button>
       </div>
@@ -156,7 +147,6 @@ const Tasks = () => {
             <h3 className="text-lg font-semibold text-gray-900">Filtres</h3>
           </div>
 
-          {/* ✅ Boutons de vue */}
           <div className="flex gap-2 mb-4">
             <button className={`btn ${taskView === "all" ? "btn-primary" : "btn-light"}`} onClick={() => setTaskView("all")}>
               Toutes les tâches
@@ -169,13 +159,16 @@ const Tasks = () => {
             </button>
           </div>
 
-          {/* Filtres classiques */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm mb-2">Projet</label>
               <select value={filters.projectId} onChange={(e) => setFilters({ ...filters, projectId: e.target.value })} className="input">
                 <option value="">Tous les projets</option>
-                {projects.map((p) => <option key={p._id} value={p._id}>{p.name}</option>)}
+                {projects.map((p) => (
+                  <option key={p._id} value={p._id}>
+                    {p.name}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -203,14 +196,14 @@ const Tasks = () => {
         </div>
       )}
 
-      {visibleTasks.length === 0 ? (
+      {tasks.length === 0 ? (
         <div className="card text-center py-12">
           <CheckSquare className="w-16 h-16 mx-auto mb-4 text-gray-300" />
           <h3 className="text-lg font-medium">Aucune tâche</h3>
         </div>
       ) : (
         <div className="space-y-4">
-          {visibleTasks.map((task) => {
+          {tasks.map((task) => {
             const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "completed";
 
             return (
@@ -221,11 +214,12 @@ const Tasks = () => {
                     <h3 className="text-lg font-bold">{task.title}</h3>
                     <p className="text-sm text-gray-600">{task.project?.name}</p>
 
-                    {task.assignedTo && task.assignedTo.length > 0 && (
+                    {task.assignedTo?.length > 0 && (
                       <div className="flex items-center flex-wrap gap-2 mt-2">
                         {task.assignedTo.map((user) => (
                           <span key={user._id} className="w-7 h-7 flex items-center justify-center rounded-full bg-purple-100 text-purple-800 text-xs font-semibold">
-                            {user.firstName[0]}{user.lastName[0]}
+                            {user.firstName[0]}
+                            {user.lastName[0]}
                           </span>
                         ))}
                       </div>
@@ -245,7 +239,12 @@ const Tasks = () => {
                     </div>
                   </div>
 
-                  <select value={task.status} onChange={(e) => updateTaskStatus(task._id, e.target.value)} onClick={(e) => e.stopPropagation()} className="text-sm border rounded-lg px-2 py-1">
+                  <select
+                    value={task.status}
+                    onChange={(e) => updateTaskStatus(task._id, e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-sm border rounded-lg px-2 py-1"
+                  >
                     <option value="not_started">Non démarrée</option>
                     <option value="in_progress">En cours</option>
                     <option value="completed">Terminée</option>
@@ -262,7 +261,10 @@ const Tasks = () => {
         <TaskModal
           task={selectedTask}
           projects={projects}
-          onClose={() => { setShowModal(false); setSelectedTask(null); }}
+          onClose={() => {
+            setShowModal(false);
+            setSelectedTask(null);
+          }}
           onSave={handleTaskUpdate}
         />
       )}
