@@ -38,14 +38,22 @@ const Tasks = () => {
     }
   }, [location]);
 
+
   useEffect(() => {
     loadData();
   }, [filters, isOverdueMode, taskView]);
+
 
   const loadData = async () => {
     try {
       let query = { ...filters };
 
+      // ✅ On supprime les filtres vides avant envoi
+      Object.keys(query).forEach(key => {
+        if (!query[key]) delete query[key];
+      });
+
+      // ✅ ENVOI DU BON FILTRE AU BACKEND
       if (taskView === "assigned") query.filterType = "assignedToMe";
       if (taskView === "created_not_assigned") query.filterType = "createdByMeNotAssignedToMe";
 
@@ -73,6 +81,7 @@ const Tasks = () => {
       setLoading(false);
     }
   };
+
 
   const handleTaskClick = (task) => {
     setSelectedTask(task);
@@ -117,7 +126,7 @@ const Tasks = () => {
       completed: "Terminée",
     }[status] || status);
 
-  // ✅ Construction de la liste affichée (filtrage local final)
+  // ✅ Liste finale affichée
   let visibleTasks = tasks;
 
   if (taskView === "assigned") {
