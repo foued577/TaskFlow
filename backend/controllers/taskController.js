@@ -3,6 +3,7 @@ const Project = require('../models/Project');
 const Team = require('../models/Team');
 const History = require('../models/History');
 const Notification = require('../models/Notification');
+const mongoose = require('mongoose');
 
 // @desc Create new task
 // @route POST /api/tasks
