@@ -57,6 +57,9 @@ const Tasks = () => {
       if (taskView === "assigned") query.filterType = "assignedToMe";
       if (taskView === "created_not_assigned") query.filterType = "createdByMeNotAssignedToMe";
 
+      console.log('🔍 Frontend sending query:', query);
+      console.log('📌 taskView:', taskView);
+
       let tasksRes = isOverdueMode
         ? await tasksAPI.getOverdue()
         : await tasksAPI.getAll(query);
