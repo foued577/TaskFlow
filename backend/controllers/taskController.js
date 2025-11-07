@@ -78,8 +78,14 @@ exports.getTasks = async (req, res) => {
   try {
     const { projectId, status, priority, filterType, assignedUser } = req.query;
 
+    console.log('🔍 getTasks called with:', { projectId, status, priority, filterType, assignedUser });
+    console.log('👤 User ID:', req.user.id);
+
     const teams = await Team.find({ 'members.user': req.user.id });
     const projects = await Project.find({ team: { $in: teams.map(t => t._id) } });
+
+    console.log('👥 Teams found:', teams.length);
+    console.log('📁 Projects found:', projects.length);
 
     let query = {
       project: projectId || { $in: projects.map(p => p._id) },
@@ -99,14 +105,21 @@ exports.getTasks = async (req, res) => {
       query.createdBy = req.user.id;
     }
 
-    // ✅ Tâches créées par moi mais NON assignées à moi
+    // ✅ Tâches créées par moi mais NON assignées (du tout)
     if (filterType === "createdByMeNotAssignedToMe") {
       query.createdBy = req.user.id;
-      query.assignedTo = { $nin: [req.user.id] };
+      // Cherche les tâches sans assigné OU sans moi dans les assignés
+      query.$or = [
+        { assignedTo: { $exists: false } },
+        { assignedTo: { $size: 0 } },
+        { assignedTo: { $nin: [req.user.id] } }
+      ];
     }
 
     // ✅ Filtre direct sur un utilisateur assigné précis
     if (assignedUser) query.assignedTo = { $in: [assignedUser] };
+
+    console.log('🔎 Final query:', JSON.stringify(query, null, 2));
 
     const tasks = await Task.find(query)
       .populate('assignedTo', 'firstName lastName email avatar')
@@ -114,9 +127,12 @@ exports.getTasks = async (req, res) => {
       .populate('project', 'name color team')
       .sort('-createdAt');
 
+    console.log('✅ Tasks found:', tasks.length);
+
     res.status(200).json({ success: true, count: tasks.length, data: tasks });
 
   } catch (error) {
+    console.error('❌ Error in getTasks:', error);
     res.status(500).json({ success: false, message: 'Error fetching tasks', error: error.message });
   }
 };
