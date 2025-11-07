@@ -102,7 +102,7 @@ exports.getTasks = async (req, res) => {
     // ✅ Tâches créées par moi mais NON assignées à moi
     if (filterType === "createdByMeNotAssignedToMe") {
       query.createdBy = req.user.id;
-      query.assignedTo = { $ne: req.user.id };
+      query.assignedTo = { $nin: [req.user.id] };
     }
 
     // ✅ Filtre direct sur un utilisateur assigné précis
