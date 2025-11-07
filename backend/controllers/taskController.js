@@ -82,7 +82,10 @@ exports.getTasks = async (req, res) => {
     console.log('🔍 getTasks called with:', { projectId, status, priority, filterType, assignedUser });
     console.log('👤 User ID:', req.user.id);
 
-    const teams = await Team.find({ 'members.user': req.user.id });
+    // Convertir l'ID utilisateur en ObjectId
+    const userId = new mongoose.Types.ObjectId(req.user.id);
+
+    const teams = await Team.find({ 'members.user': userId });
     const projects = await Project.find({ team: { $in: teams.map(t => t._id) } });
 
     console.log('👥 Teams found:', teams.length);
@@ -98,27 +101,29 @@ exports.getTasks = async (req, res) => {
 
     // ✅ Tâches où JE suis assigné
     if (filterType === "assignedToMe") {
-      query.assignedTo = { $in: [req.user.id] };
+      query.assignedTo = userId;
+      console.log('🎯 Filter: assignedToMe with userId:', userId);
     }
 
     // ✅ Tâches créées par moi
     if (filterType === "createdByMe") {
-      query.createdBy = req.user.id;
+      query.createdBy = userId;
     }
 
     // ✅ Tâches créées par moi mais NON assignées (du tout)
     if (filterType === "createdByMeNotAssignedToMe") {
-      query.createdBy = req.user.id;
+      query.createdBy = userId;
       // Cherche les tâches sans assigné OU sans moi dans les assignés
       query.$or = [
         { assignedTo: { $exists: false } },
         { assignedTo: { $size: 0 } },
-        { assignedTo: { $nin: [req.user.id] } }
+        { assignedTo: { $nin: [userId] } }
       ];
+      console.log('🎯 Filter: createdByMeNotAssignedToMe');
     }
 
     // ✅ Filtre direct sur un utilisateur assigné précis
-    if (assignedUser) query.assignedTo = { $in: [assignedUser] };
+    if (assignedUser) query.assignedTo = new mongoose.Types.ObjectId(assignedUser);
 
     console.log('🔎 Final query:', JSON.stringify(query, null, 2));
 
@@ -129,6 +134,15 @@ exports.getTasks = async (req, res) => {
       .sort('-createdAt');
 
     console.log('✅ Tasks found:', tasks.length);
+    
+    // Debug: afficher les premières tâches si elles existent
+    if (tasks.length > 0) {
+      console.log('📝 Sample task:', {
+        title: tasks[0].title,
+        assignedTo: tasks[0].assignedTo?.map(u => u._id),
+        createdBy: tasks[0].createdBy?._id
+      });
+    }
 
     res.status(200).json({ success: true, count: tasks.length, data: tasks });
 
