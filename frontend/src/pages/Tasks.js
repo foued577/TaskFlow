@@ -126,22 +126,8 @@ const Tasks = () => {
       completed: "Terminée",
     }[status] || status);
 
-  // ✅ Liste finale affichée
+  // ✅ Liste finale affichée (le filtrage est déjà fait par le backend via filterType)
   let visibleTasks = tasks;
-
-  if (taskView === "assigned") {
-    visibleTasks = visibleTasks.filter((t) =>
-      t.assignedTo?.some((u) => u._id === user._id)
-    );
-  }
-
-  if (taskView === "created_not_assigned") {
-    visibleTasks = visibleTasks.filter(
-      (t) =>
-        t.createdBy?._id === user._id &&
-        !t.assignedTo?.some((u) => u._id === user._id)
-    );
-  }
 
   if (loading) return <Loading fullScreen={false} />;
 
