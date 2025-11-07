@@ -101,7 +101,7 @@ exports.getTasks = async (req, res) => {
 
     // ✅ Tâches où JE suis assigné
     if (filterType === "assignedToMe") {
-      query.assignedTo = userId;
+      query.assignedTo = { $in: [userId] };
       console.log('🎯 Filter: assignedToMe with userId:', userId);
     }
 
@@ -123,7 +123,7 @@ exports.getTasks = async (req, res) => {
     }
 
     // ✅ Filtre direct sur un utilisateur assigné précis
-    if (assignedUser) query.assignedTo = new mongoose.Types.ObjectId(assignedUser);
+    if (assignedUser) query.assignedTo = { $in: [new mongoose.Types.ObjectId(assignedUser)] };
 
     console.log('🔎 Final query:', JSON.stringify(query, null, 2));
 
