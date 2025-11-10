@@ -33,134 +33,146 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
   const [comments, setComments] = useState([]);
   const [newSubtask, setNewSubtask] = useState('');
   const [newComment, setNewComment] = useState('');
+
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
+
   const [loading, setLoading] = useState(false);
 
-  // Charger la tâche/les commentaires
   useEffect(() => {
-    if (!task) return;
-    setFormData({
-      title: task.title,
-      description: task.description || '',
-      projectId: task.project._id || task.project,
-      assignedTo: (task.assignedTo || []).map((u) => u._id || u),
-      priority: task.priority || 'medium',
-      status: task.status || 'not_started',
-      estimatedHours: task.estimatedHours || 0,
-      startDate: task.startDate ? format(new Date(task.startDate), 'yyyy-MM-dd') : '',
-      dueDate: task.dueDate ? format(new Date(task.dueDate), 'yyyy-MM-dd') : '',
-      tags: (task.tags || []).join(', '),
-    });
-    setSubtasks(task.subtasks || []);
-    loadComments();
+    if (task) {
+      setFormData({
+        title: task.title,
+        description: task.description || '',
+        projectId: task.project._id || task.project,
+        assignedTo: (task.assignedTo || []).map((u) => u._id || u),
+        priority: task.priority || 'medium',
+        status: task.status || 'not_started',
+        estimatedHours: task.estimatedHours || 0,
+        startDate: task.startDate ? format(new Date(task.startDate), 'yyyy-MM-dd') : '',
+        dueDate: task.dueDate ? format(new Date(task.dueDate), 'yyyy-MM-dd') : '',
+        tags: task.tags?.join(', ') || '',
+      });
+      setSubtasks(task.subtasks || []);
+      loadComments(task._id);
+    } else {
+      // reset pour création
+      setFormData((prev) => ({
+        ...prev,
+        title: '',
+        description: '',
+        projectId: '',
+        assignedTo: [],
+        priority: 'medium',
+        status: 'not_started',
+        estimatedHours: 0,
+        startDate: '',
+        dueDate: '',
+        tags: '',
+      }));
+      setSubtasks([]);
+      setComments([]);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [task?._id]);
+  }, [task]);
 
-  const loadComments = async () => {
-    if (!task) return;
+  const loadComments = async (taskId) => {
     try {
-      const res = await commentsAPI.getForTask(task._id);
-      setComments(res.data.data || []);
-    } catch (err) {
-      console.error('Failed to load comments:', err);
+      const response = await commentsAPI.getForTask(taskId);
+      setComments(response.data.data || []);
+    } catch (error) {
+      console.error('Failed to load comments:', error);
     }
   };
 
-  // Création / mise à jour
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+
     try {
-      const payload = {
+      const data = {
         ...formData,
-        tags: formData.tags
-          ? formData.tags.split(',').map((t) => t.trim()).filter(Boolean)
-          : [],
+        tags: formData.tags ? formData.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
       };
 
       if (task) {
-        await tasksAPI.update(task._id, payload);
+        await tasksAPI.update(task._id, data);
         toast.success('Tâche mise à jour');
       } else {
-        await tasksAPI.create(payload);
+        await tasksAPI.create(data);
         toast.success('Tâche créée avec succès');
       }
       onSave();
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Une erreur est survenue');
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Une erreur est survenue');
     } finally {
       setLoading(false);
     }
   };
 
-  // Suppression
   const deleteTask = async () => {
-    if (!task) return;
-    if (!window.confirm('Voulez-vous vraiment supprimer cette tâche ?')) return;
+    if (!task || !window.confirm('Voulez-vous vraiment supprimer cette tâche ?')) return;
+
     try {
       await tasksAPI.delete(task._id);
       toast.success('Tâche supprimée');
       onSave();
-    } catch (err) {
-      toast.error("Erreur lors de la suppression");
+    } catch (error) {
+      toast.error('Erreur lors de la suppression');
     }
   };
 
-  // Sous-tâches
   const addSubtask = async () => {
-    if (!task || !newSubtask.trim()) return;
+    if (!newSubtask.trim() || !task) return;
+
     try {
       await tasksAPI.addSubtask(task._id, newSubtask.trim());
       setNewSubtask('');
-      const refreshed = await tasksAPI.getOne(task._id);
-      setSubtasks(refreshed.data.data.subtasks || []);
+      const response = await tasksAPI.getOne(task._id);
+      setSubtasks(response.data.data.subtasks || []);
       toast.success('Sous-tâche ajoutée');
-    } catch {
-      toast.error("Erreur lors de l'ajout");
+    } catch (error) {
+      toast.error("Erreur lors de l'ajout de la sous-tâche");
     }
   };
 
   const toggleSubtask = async (subtaskId) => {
     if (!task) return;
+
     try {
       await tasksAPI.toggleSubtask(task._id, subtaskId);
-      const refreshed = await tasksAPI.getOne(task._id);
-      setSubtasks(refreshed.data.data.subtasks || []);
-    } catch {
-      toast.error('Erreur');
+      const response = await tasksAPI.getOne(task._id);
+      setSubtasks(response.data.data.subtasks || []);
+    } catch (error) {
+      toast.error('Erreur lors du changement de statut de la sous-tâche');
     }
   };
 
-  // Commentaires (+ détection simple des @mentions côté UI)
   const addComment = async () => {
-    if (!task || !newComment.trim()) return;
+    if (!newComment.trim() || !task) return;
+
     try {
-      await commentsAPI.create({
-        taskId: task._id,
-        content: newComment.trim(),
-      });
+      await commentsAPI.create({ taskId: task._id, content: newComment.trim() });
       setNewComment('');
-      await loadComments();
+      await loadComments(task._id);
       toast.success('Commentaire ajouté');
-    } catch {
-      toast.error("Erreur lors de l'ajout");
+    } catch (error) {
+      toast.error("Erreur lors de l'ajout du commentaire");
     }
   };
 
-  // Recherche d’utilisateurs
   const searchUsers = async (query) => {
     setSearchQuery(query);
-    if (!query || query.length < 2) {
+    if (query.trim().length < 2) {
       setSearchResults([]);
       return;
     }
     try {
-      // si besoin: usersAPI.search(query, teamId)
-      const res = await usersAPI.search(query);
+      const res = await usersAPI.search(query.trim());
       setSearchResults(res.data.data || []);
-    } catch (err) {
-      console.error('Search error:', err);
+    } catch (error) {
+      console.error('Search error:', error);
+      setSearchResults([]);
     }
   };
 
@@ -179,41 +191,6 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
     }));
   };
 
-  // Helpers UI
-  const displayAssigned = () => {
-    // Quand on édite, task.assignedTo contient déjà les objets utilisateurs
-    // mais si c’est une création, on n’a que les ids; on affiche juste le compteur.
-    const users =
-      (task?.assignedTo || []).filter((u) => formData.assignedTo.includes(u._id));
-    if (!users.length) {
-      return (
-        <div className="text-sm text-gray-500">
-          {formData.assignedTo.length} utilisateur(s) assigné(s)
-        </div>
-      );
-    }
-    return (
-      <div className="flex flex-wrap gap-2 mt-2">
-        {users.map((u) => (
-          <span
-            key={u._id}
-            className="inline-flex items-center px-2 py-1 rounded-full bg-purple-100 text-purple-800 text-xs font-medium"
-          >
-            {u.firstName} {u.lastName}
-            <button
-              type="button"
-              onClick={() => removeAssignee(u._id)}
-              className="ml-2 text-purple-700 hover:text-purple-900"
-              title="Retirer"
-            >
-              ×
-            </button>
-          </span>
-        ))}
-      </div>
-    );
-  };
-
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
@@ -225,20 +202,25 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
           <div className="flex items-center space-x-2">
             {task && (
               <button
-                onClick={deleteTask}
                 type="button"
+                onClick={deleteTask}
                 className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                aria-label="Supprimer la tâche"
               >
                 <Trash2 className="w-5 h-5" />
               </button>
             )}
-            <button onClick={onClose} type="button" className="text-gray-400 hover:text-gray-600">
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600"
+              aria-label="Fermer"
+            >
               <X className="w-6 h-6" />
             </button>
           </div>
         </div>
 
-        {/* Body */}
         <div className="p-6">
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Title */}
@@ -374,26 +356,26 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
                   value={searchQuery}
                   onChange={(e) => searchUsers(e.target.value)}
                   className="input"
-                  placeholder="Rechercher un utilisateur…"
+                  placeholder="Rechercher un utilisateur..."
                 />
                 {searchResults.length > 0 && (
                   <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                    {searchResults.map((u) => (
+                    {searchResults.map((user) => (
                       <button
-                        key={u._id}
+                        key={user._id}
                         type="button"
-                        onClick={() => addAssignee(u._id)}
+                        onClick={() => addAssignee(user._id)}
                         className="w-full flex items-center px-4 py-2 hover:bg-gray-100 text-left"
                       >
                         <div className="w-8 h-8 rounded-full bg-primary-600 flex items-center justify-center text-white text-sm font-semibold mr-2">
-                          {u.firstName?.charAt(0)}
-                          {u.lastName?.charAt(0)}
+                          {(user.firstName || '').charAt(0)}
+                          {(user.lastName || '').charAt(0)}
                         </div>
                         <div>
                           <p className="font-medium">
-                            {u.firstName} {u.lastName}
+                            {user.firstName} {user.lastName}
                           </p>
-                          <p className="text-xs text-gray-500">{u.email}</p>
+                          <p className="text-xs text-gray-500">{user.email}</p>
                         </div>
                       </button>
                     ))}
@@ -401,7 +383,33 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
                 )}
               </div>
 
-              {displayAssigned()}
+              {/* Assigned Users List */}
+              <div className="flex flex-wrap gap-2">
+                {formData.assignedTo.length === 0 ? (
+                  <span className="text-sm text-gray-500">Aucun utilisateur assigné</span>
+                ) : (
+                  formData.assignedTo.map((id) => (
+                    <span
+                      key={id}
+                      className="inline-flex items-center gap-2 px-2 py-1 bg-gray-100 rounded-full text-sm"
+                    >
+                      <span className="w-6 h-6 rounded-full bg-purple-600 text-white flex items-center justify-center text-xs">
+                        {/* Affichage minimal des initiales (id tronqué si pas d'objets complets) */}
+                        {String(id).slice(0, 2).toUpperCase()}
+                      </span>
+                      <span className="text-gray-700">{String(id)}</span>
+                      <button
+                        type="button"
+                        className="text-gray-500 hover:text-red-600"
+                        onClick={() => removeAssignee(id)}
+                        aria-label="Retirer l'utilisateur"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </span>
+                  ))
+                )}
+              </div>
             </div>
 
             {/* Tags */}
@@ -425,20 +433,27 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
                   Sous-tâches
                 </label>
                 <div className="space-y-2 mb-2">
-                  {subtasks.map((s) => (
-                    <div key={s._id} className="flex items-center p-2 border border-gray-200 rounded-lg">
+                  {subtasks.map((subtask) => (
+                    <div
+                      key={subtask._id}
+                      className="flex items-center p-2 border border-gray-200 rounded-lg"
+                    >
                       <button
                         type="button"
-                        onClick={() => toggleSubtask(s._id)}
+                        onClick={() => toggleSubtask(subtask._id)}
                         className={`flex-shrink-0 w-5 h-5 rounded border-2 mr-3 flex items-center justify-center ${
-                          s.isCompleted ? 'bg-green-500 border-green-500' : 'border-gray-300'
+                          subtask.isCompleted ? 'bg-green-500 border-green-500' : 'border-gray-300'
                         }`}
-                        title={s.isCompleted ? 'Marquer non terminée' : 'Marquer terminée'}
+                        aria-label="Changer le statut de la sous-tâche"
                       >
-                        {s.isCompleted && <Check className="w-3 h-3 text-white" />}
+                        {subtask.isCompleted && <Check className="w-3 h-3 text-white" />}
                       </button>
-                      <span className={`flex-1 ${s.isCompleted ? 'line-through text-gray-500' : ''}`}>
-                        {s.title}
+                      <span
+                        className={`flex-1 ${
+                          subtask.isCompleted ? 'line-through text-gray-500' : ''
+                        }`}
+                      >
+                        {subtask.title}
                       </span>
                     </div>
                   ))}
@@ -449,7 +464,7 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
                     value={newSubtask}
                     onChange={(e) => setNewSubtask(e.target.value)}
                     className="input"
-                    placeholder="Nouvelle sous-tâche…"
+                    placeholder="Nouvelle sous-tâche..."
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
@@ -473,23 +488,25 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
                 </label>
 
                 <div className="space-y-3 mb-3 max-h-64 overflow-y-auto">
-                  {comments.map((c) => (
-                    <div key={c._id} className="p-3 border border-gray-200 rounded-lg">
+                  {comments.map((comment) => (
+                    <div key={comment._id} className="p-3 border border-gray-200 rounded-lg">
                       <div className="flex items-center mb-2">
                         <div className="w-8 h-8 rounded-full bg-primary-600 flex items-center justify-center text-white text-xs font-semibold mr-2">
-                          {c.user?.firstName?.charAt(0)}
-                          {c.user?.lastName?.charAt(0)}
+                          {(comment.user?.firstName || '').charAt(0)}
+                          {(comment.user?.lastName || '').charAt(0)}
                         </div>
                         <div className="flex-1">
                           <p className="text-sm font-medium">
-                            {c.user?.firstName} {c.user?.lastName}
+                            {comment.user?.firstName} {comment.user?.lastName}
                           </p>
                           <p className="text-xs text-gray-500">
-                            {format(new Date(c.createdAt), 'dd MMM yyyy à HH:mm', { locale: fr })}
+                            {format(new Date(comment.createdAt), 'dd MMM yyyy à HH:mm', {
+                              locale: fr,
+                            })}
                           </p>
                         </div>
                       </div>
-                      <p className="text-sm text-gray-700">{c.content}</p>
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap">{comment.content}</p>
                     </div>
                   ))}
                 </div>
@@ -500,7 +517,7 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
                     value={newComment}
                     onChange={(e) => setNewComment(e.target.value)}
                     className="input"
-                    placeholder="Ajouter un commentaire… (astuce : @Nom pour mentionner)"
+                    placeholder="Ajouter un commentaire... (Entrée pour envoyer)"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
@@ -515,8 +532,8 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
               </div>
             )}
 
-            {/* Footer */}
-            <div className="flex space-x-3 pt-4 border-t border-gray-200">
+            {/* Submit Buttons */}
+            <div className="flex space-x-3 pt-4 border-top border-gray-200">
               <button
                 type="submit"
                 disabled={loading}
