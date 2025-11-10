@@ -129,15 +129,27 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
     }
   };
 
-  // ✅ Ajout des mentions : @Nom
+  // ✅ Mention system : convertir @Nom → ID des utilisateurs
   const addComment = async () => {
     if (!newComment.trim() || !task) return;
 
     try {
-      const mentionMatches = newComment.match(/@(\w+)/g);
-      const mentionedNames = mentionMatches ? mentionMatches.map(m => m.substring(1)) : [];
+      const mentionMatches = newComment.match(/@(\w+)/g) || [];
+      const mentionedUserIds = [];
 
-      await commentsAPI.create({ taskId: task._id, content: newComment, mentionedNames });
+      for (const mention of mentionMatches) {
+        const username = mention.substring(1);
+        const res = await usersAPI.search(username);
+        if (res.data.data[0]) {
+          mentionedUserIds.push(res.data.data[0]._id);
+        }
+      }
+
+      await commentsAPI.create({
+        taskId: task._id,
+        content: newComment,
+        mentions: mentionedUserIds
+      });
 
       setNewComment('');
       loadComments();
@@ -170,7 +182,7 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg max-w-4xl w-full max-height-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
 
         {/* HEADER */}
         <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
@@ -199,7 +211,7 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
                 className="input text-lg font-semibold" required />
             </div>
 
-            {/* Projet et statut */}
+            {/* Projet & Statut */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-2">Projet</label>
@@ -230,7 +242,7 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
                 className="input" rows={4} />
             </div>
 
-            {/* Priorité et Estimation */}
+            {/* Priorité & Estimation */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-2">Priorité</label>
@@ -375,7 +387,7 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
                         </div>
                       </div>
 
-                      {/* ✅ Colorisation des @mentions */}
+                      {/* ✅ Colorisation des mentions */}
                       <p className="text-sm text-gray-700">
                         {comment.content.split(/(@\w+)/g).map((part, i) =>
                           part.startsWith('@') ? (
@@ -402,7 +414,7 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
               </div>
             )}
 
-            {/* Boutons */}
+            {/* Buttons */}
             <div className="flex space-x-3 pt-4 border-t border-gray-200">
               <button type="submit" disabled={loading}
                 className="flex-1 btn btn-primary flex items-center justify-center">
