@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+// src/components/TaskModal.js
+import React, { useState, useEffect, useRef } from 'react';
 import { tasksAPI, usersAPI, commentsAPI } from '../utils/api';
 import { toast } from 'react-toastify';
 import {
@@ -16,11 +17,12 @@ import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
 const TaskModal = ({ task, projects, onClose, onSave }) => {
+  // -------- Formulaire tâche --------
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     projectId: '',
-    assignedTo: [],
+    assignedTo: [],          // tableau d'IDs
     priority: 'medium',
     status: 'not_started',
     estimatedHours: 0,
@@ -29,35 +31,55 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
     tags: '',
   });
 
+  // On garde séparément les objets utilisateurs pour l'affichage des "chips"
+  const [assignedUsers, setAssignedUsers] = useState([]); // tableau d'objets user
+
+  // -------- Sous-tâches & commentaires --------
   const [subtasks, setSubtasks] = useState([]);
   const [comments, setComments] = useState([]);
   const [newSubtask, setNewSubtask] = useState('');
+
+  // -------- Commentaires / mentions --------
   const [newComment, setNewComment] = useState('');
+  const [mentionSuggestions, setMentionSuggestions] = useState([]); // suggestions dropdown
+  const [showMentionBox, setShowMentionBox] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState('');
+  const commentInputRef = useRef(null);
+
+  // -------- Recherche d'utilisateurs pour assignation --------
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
+
   const [loading, setLoading] = useState(false);
 
-  // Charger la tâche (si édition) + ses commentaires
+  // ---------- Chargement initial si édition ----------
   useEffect(() => {
-    if (task) {
-      setFormData({
-        title: task.title,
-        description: task.description || '',
-        projectId: task.project?._id || task.project,
-        assignedTo: (task.assignedTo || []).map((u) => u._id || u),
-        priority: task.priority || 'medium',
-        status: task.status || 'not_started',
-        estimatedHours: task.estimatedHours || 0,
-        startDate: task.startDate ? format(new Date(task.startDate), 'yyyy-MM-dd') : '',
-        dueDate: task.dueDate ? format(new Date(task.dueDate), 'yyyy-MM-dd') : '',
-        tags: Array.isArray(task.tags) ? task.tags.join(', ') : (task.tags || ''),
-      });
-      setSubtasks(task.subtasks || []);
-      loadComments(task._id);
-    }
+    if (!task) return;
+
+    // Pré-remplissage
+    setFormData({
+      title: task.title,
+      description: task.description || '',
+      projectId: task.project?._id || task.project,
+      assignedTo: (task.assignedTo || []).map(u => u._id || u),
+      priority: task.priority || 'medium',
+      status: task.status || 'not_started',
+      estimatedHours: task.estimatedHours || 0,
+      startDate: task.startDate ? format(new Date(task.startDate), 'yyyy-MM-dd') : '',
+      dueDate: task.dueDate ? format(new Date(task.dueDate), 'yyyy-MM-dd') : '',
+      tags: Array.isArray(task.tags) ? task.tags.join(', ') : (task.tags || ''),
+    });
+
+    // Objets utilisateurs pour l’affichage des chips
+    const fullUsers = (task.assignedTo || []).map(u => (typeof u === 'object' ? u : null)).filter(Boolean);
+    setAssignedUsers(fullUsers);
+
+    // Sous-tâches & commentaires
+    setSubtasks(task.subtasks || []);
+    loadComments(task._id);
   }, [task]);
 
-  // Charger les commentaires d’une tâche
+  // ---------- Charger commentaires ----------
   const loadComments = async (taskId) => {
     if (!taskId) return;
     try {
@@ -68,16 +90,15 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
     }
   };
 
-  // Création / Mise à jour de la tâche
+  // ---------- Sauvegarde tâche ----------
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-
     try {
       const payload = {
         ...formData,
         tags: formData.tags
-          ? formData.tags.split(',').map((t) => t.trim()).filter(Boolean)
+          ? formData.tags.split(',').map(t => t.trim()).filter(Boolean)
           : [],
       };
 
@@ -96,7 +117,7 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
     }
   };
 
-  // Suppression de la tâche
+  // ---------- Suppression tâche ----------
   const deleteTask = async () => {
     if (!task || !window.confirm('Voulez-vous vraiment supprimer cette tâche ?')) return;
     try {
@@ -108,7 +129,7 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
     }
   };
 
-  // Sous-tâches
+  // ---------- Sous-tâches ----------
   const addSubtask = async () => {
     if (!newSubtask.trim() || !task) return;
     try {
@@ -133,32 +154,91 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
     }
   };
 
-  // Mentions @Nom → ids d’utilisateurs + ajout de commentaire
+  // ---------- Mentions (@Nom) ----------
+  // Affiche les suggestions lorsqu’on tape "@" + lettres
+  const updateMentionSuggestions = async (value) => {
+    // Récupère le dernier segment commençant par @ jusqu’à un espace/fin
+    const caretPos = commentInputRef.current?.selectionStart ?? value.length;
+    const beforeCaret = value.slice(0, caretPos);
+    const match = beforeCaret.match(/@([A-Za-zÀ-ÖØ-öø-ÿ0-9_-]{1,30})$/);
+
+    if (!match) {
+      setShowMentionBox(false);
+      setMentionQuery('');
+      setMentionSuggestions([]);
+      return;
+    }
+
+    const q = match[1];
+    setMentionQuery(q);
+    try {
+      const res = await usersAPI.search(q);
+      const items = res?.data?.data || [];
+      setMentionSuggestions(items.slice(0, 8));
+      setShowMentionBox(items.length > 0);
+    } catch {
+      setMentionSuggestions([]);
+      setShowMentionBox(false);
+    }
+  };
+
+  const insertMention = (user) => {
+    // Remplace le segment "@xxx" courant par "@Prénom"
+    const input = commentInputRef.current;
+    if (!input) return;
+
+    const value = newComment;
+    const caretPos = input.selectionStart ?? value.length;
+    const beforeCaret = value.slice(0, caretPos);
+    const afterCaret = value.slice(caretPos);
+
+    const match = beforeCaret.match(/@([A-Za-zÀ-ÖØ-öø-ÿ0-9_-]{1,30})$/);
+    if (!match) return;
+
+    const mentionStart = beforeCaret.lastIndexOf('@' + match[1]);
+    const newValue =
+      beforeCaret.slice(0, mentionStart) +
+      '@' + (user.firstName || '') + // on insère @Prénom
+      ' ' + // petit espace après pour fluidifier la saisie
+      afterCaret;
+
+    setNewComment(newValue);
+    setShowMentionBox(false);
+    setMentionSuggestions([]);
+    // remet le curseur juste après l'insertion
+    setTimeout(() => {
+      const pos = (beforeCaret.slice(0, mentionStart) + '@' + (user.firstName || '') + ' ').length;
+      input.setSelectionRange(pos, pos);
+      input.focus();
+    }, 0);
+  };
+
+  // Envoi du commentaire avec mentions résolues → IDs pour les notifications
   const addComment = async () => {
     if (!newComment.trim() || !task) return;
 
     try {
-      // On capture @mots (lettres, chiffres, _, -, accents possibles) – sensible à l’espace
+      // capture @token (lettres/chiffres/accents/_/-)
       const mentionMatches = newComment.match(/@([A-Za-zÀ-ÖØ-öø-ÿ0-9_-]+)/g) || [];
+      const unique = [...new Set(mentionMatches.map(m => m.substring(1)))];
+
       const mentionedUserIds = [];
-
-      // On déduplique pour éviter des requêtes inutiles
-      const uniqueMentions = [...new Set(mentionMatches.map((m) => m.substring(1)))];
-
-      // Pour chaque mention, essayer de retrouver l’utilisateur par recherche
-      for (const username of uniqueMentions) {
-        // usersAPI.search(q, teamId?) => ici simple recherche par nom/prénom/email
-        const res = await usersAPI.search(username);
-        const found = res?.data?.data || [];
-        if (found.length > 0) {
-          mentionedUserIds.push(found[0]._id);
+      for (const token of unique) {
+        try {
+          const res = await usersAPI.search(token);
+          const found = res?.data?.data || [];
+          if (found.length > 0) {
+            mentionedUserIds.push(found[0]._id);
+          }
+        } catch {
+          /* ignore */
         }
       }
 
       await commentsAPI.create({
         taskId: task._id,
         content: newComment,
-        mentions: mentionedUserIds,
+        mentions: mentionedUserIds, // utilisé par votre backend pour notifier
       });
 
       setNewComment('');
@@ -169,7 +249,7 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
     }
   };
 
-  // Recherche utilisateurs (assignation)
+  // ---------- Recherche/Assignation ----------
   const searchUsers = async (query) => {
     if (!query || query.trim().length < 2) {
       setSearchResults([]);
@@ -183,21 +263,25 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
     }
   };
 
-  const addAssignee = (userId) => {
-    if (!formData.assignedTo.includes(userId)) {
-      setFormData((s) => ({ ...s, assignedTo: [...s.assignedTo, userId] }));
+  const addAssignee = (user) => {
+    const id = user._id;
+    if (!formData.assignedTo.includes(id)) {
+      setFormData(s => ({ ...s, assignedTo: [...s.assignedTo, id] }));
+      setAssignedUsers(arr => [...arr, user]); // garder l’objet pour l’affichage
     }
     setSearchQuery('');
     setSearchResults([]);
   };
 
   const removeAssignee = (userId) => {
-    setFormData((s) => ({
+    setFormData(s => ({
       ...s,
-      assignedTo: s.assignedTo.filter((id) => id !== userId),
+      assignedTo: s.assignedTo.filter(id => id !== userId),
     }));
+    setAssignedUsers(arr => arr.filter(u => u._id !== userId));
   };
 
+  // ---------- Rendu ----------
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
@@ -368,10 +452,10 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
                       <button
                         key={user._id}
                         type="button"
-                        onClick={() => addAssignee(user._id)}
+                        onClick={() => addAssignee(user)}
                         className="w-full flex items-center px-4 py-2 hover:bg-gray-100 text-left"
                       >
-                        <div className="w-8 h-8 rounded-full bg-primary-600 flex items-center justify-center text-white text-sm font-semibold mr-2">
+                        <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-white text-sm font-semibold mr-2">
                           {(user.firstName || '?')[0]}
                           {(user.lastName || '')[0]}
                         </div>
@@ -387,18 +471,22 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
                 )}
               </div>
 
-              {/* Liste des assignés (chips) */}
-              {formData.assignedTo.length > 0 ? (
+              {/* Chips des assignés (noms, pas d'IDs) */}
+              {assignedUsers.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
-                  {formData.assignedTo.map((id) => (
+                  {assignedUsers.map((u) => (
                     <span
-                      key={id}
+                      key={u._id}
                       className="inline-flex items-center px-2 py-1 rounded-full bg-purple-50 text-purple-700 text-xs border border-purple-200"
                     >
-                      {id}
+                      <span className="mr-1 font-semibold">
+                        {(u.firstName || '?')[0]}
+                        {(u.lastName || '')[0]}
+                      </span>
+                      {u.firstName} {u.lastName}
                       <button
                         type="button"
-                        onClick={() => removeAssignee(id)}
+                        onClick={() => removeAssignee(u._id)}
                         className="ml-2 text-purple-500 hover:text-purple-700"
                         title="Retirer"
                       >
@@ -462,108 +550,4 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
                   <input
                     type="text"
                     value={newSubtask}
-                    onChange={(e) => setNewSubtask(e.target.value)}
-                    className="input"
-                    placeholder="Nouvelle sous-tâche..."
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        addSubtask();
-                      }
-                    }}
-                  />
-                  <button type="button" onClick={addSubtask} className="btn btn-secondary">
-                    <Plus className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Commentaires */}
-            {task && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3 flex items-center">
-                  <MessageSquare className="w-4 h-4 mr-1" />
-                  Commentaires ({comments.length})
-                </label>
-
-                <div className="space-y-3 mb-3 max-h-64 overflow-y-auto">
-                  {comments.map((comment) => (
-                    <div key={comment._id} className="p-3 border border-gray-200 rounded-lg">
-                      <div className="flex items-center mb-2">
-                        <div className="w-8 h-8 rounded-full bg-primary-600 flex items-center justify-center text-white text-xs font-semibold mr-2">
-                          {(comment.user?.firstName || '?')[0]}
-                          {(comment.user?.lastName || '')[0]}
-                        </div>
-                        <div className="flex-1">
-                          <p className="text-sm font-medium">
-                            {comment.user?.firstName} {comment.user?.lastName}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {format(new Date(comment.createdAt), 'dd MMM yyyy à HH:mm', {
-                              locale: fr,
-                            })}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Mise en évidence des mentions */}
-                      <p className="text-sm text-gray-700">
-                        {comment.content.split(/(@[A-Za-zÀ-ÖØ-öø-ÿ0-9_-]+)/g).map((part, i) =>
-                          part.startsWith('@') ? (
-                            <span key={i} className="text-blue-600 font-medium">
-                              {part}
-                            </span>
-                          ) : (
-                            <span key={i}>{part}</span>
-                          )
-                        )}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="flex space-x-2">
-                  <input
-                    type="text"
-                    value={newComment}
-                    onChange={(e) => setNewComment(e.target.value)}
-                    className="input"
-                    placeholder="Ajouter un commentaire… (utilise @Nom pour notifier)"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        addComment();
-                      }
-                    }}
-                  />
-                  <button type="button" onClick={addComment} className="btn btn-secondary">
-                    <MessageSquare className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Actions */}
-            <div className="flex space-x-3 pt-4 border-t border-gray-200">
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex-1 btn btn-primary flex items-center justify-center"
-              >
-                <Save className="w-5 h-5 mr-2" />
-                {task ? 'Mettre à jour' : 'Créer'}
-              </button>
-
-              <button type="button" onClick={onClose} className="flex-1 btn btn-secondary">
-                Annuler
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-export default TaskModal;
+                    onChange={(e) => setNewSub
