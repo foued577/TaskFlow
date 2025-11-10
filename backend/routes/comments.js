@@ -1,24 +1,18 @@
 const express = require('express');
-const router = express.Router();
-const { protect } = require('../middleware/authMiddleware');
 
-const {
-  createComment,
-  getComments,
-  updateComment,
-  deleteComment
-} = require('../controllers/commentController');
+2
 
-// Create comment
+const router = express. Router();
+
+teamController.js
+
+const { createComment, getComments, updateComment, deleteComment } = require(' .. /controllers/commentController');
+
+userController.js
+
+const { protect } = require(' .. /middleware/auth');
 router.post('/', protect, createComment);
-
-// Get all comments for a task
-router.get('/task/:taskId', protect, getComments);
-
-// Update comment
+router .get('/task/:taskId', protect, getComments);
 router.put('/:id', protect, updateComment);
-
-// Delete comment
-router.delete('/:id', protect, deleteComment);
-
+router.delete('/: id', protect, deleteComment);
 module.exports = router;
