@@ -1,5 +1,5 @@
 // src/components/TaskModal.js
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { tasksAPI, usersAPI, commentsAPI } from '../utils/api';
 import { toast } from 'react-toastify';
 import {
@@ -16,20 +16,15 @@ import {
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
-const initialsOf = (u) =>
-  `${(u?.firstName || '?').charAt(0)}${(u?.lastName || '').charAt(0)}`;
-
-/**
- * IMPORTANT
- * - formData.assignedTo = tableau d'IDs pour l'API (inchangé)
- * - assignedUsers = mêmes utilisateurs en objets complets pour l'affichage (noms + initiales)
- */
 const TaskModal = ({ task, projects, onClose, onSave }) => {
+  /* ================================
+   * Formulaire & états principaux
+   * ================================ */
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     projectId: '',
-    assignedTo: [],
+    assignedTo: [], // IDs
     priority: 'medium',
     status: 'not_started',
     estimatedHours: 0,
@@ -38,127 +33,110 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
     tags: '',
   });
 
-  // Objets utilisateurs pour afficher les chips jolies
-  const [assignedUsers, setAssignedUsers] = useState([]);
+  // Pour un affichage propre des assignés (objets utilisateurs)
+  const [assignedUsers, setAssignedUsers] = useState([]); // [{_id, firstName, lastName, email, ...}]
 
+  // Sous-tâches
   const [subtasks, setSubtasks] = useState([]);
-  const [comments, setComments] = useState([]);
   const [newSubtask, setNewSubtask] = useState('');
 
-  // Commentaires + mentions
+  // Commentaires
+  const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
-  const [mentionSuggestions, setMentionSuggestions] = useState([]);
-  const [showMentionBox, setShowMentionBox] = useState(false);
-  const commentInputRef = useRef(null);
 
-  // Recherche d’utilisateurs (assignation)
+  // Mentions (@) – autocomplete
+  const commentInputRef = useRef(null);
+  const [mentionSuggestions, setMentionSuggestions] = useState([]); // users[]
+  const [showMentionBox, setShowMentionBox] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState('');
+  const [mentionIdsSelected, setMentionIdsSelected] = useState([]); // IDs ajoutés via la popup
+
+  // Recherche d’utilisateurs pour l’assignation
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
 
   const [loading, setLoading] = useState(false);
 
-  // ===========================
-  // Chargement initial (édition)
-  // ===========================
+  /* ================================
+   * Chargement initial en édition
+   * ================================ */
   useEffect(() => {
-    if (!task) return;
+    const fillFromTask = async () => {
+      if (!task) return;
 
-    setFormData({
-      title: task.title,
-      description: task.description || '',
-      projectId: task.project?._id || task.project,
-      assignedTo: (task.assignedTo || []).map((u) => u._id || u),
-      priority: task.priority || 'medium',
-      status: task.status || 'not_started',
-      estimatedHours: task.estimatedHours || 0,
-      startDate: task.startDate ? format(new Date(task.startDate), 'yyyy-MM-dd') : '',
-      dueDate: task.dueDate ? format(new Date(task.dueDate), 'yyyy-MM-dd') : '',
-      tags: Array.isArray(task.tags) ? task.tags.join(', ') : (task.tags || ''),
-    });
+      // Pré-remplir
+      const assignedIds = (task.assignedTo || []).map((u) => (typeof u === 'object' ? u._id : u));
 
-    // Si le backend renvoie déjà les objets utilisateurs
-    const fullUsers =
-      (task.assignedTo || [])
-        .map((u) => (typeof u === 'object' ? u : null))
-        .filter(Boolean) || [];
-    setAssignedUsers(fullUsers);
+      setFormData({
+        title: task.title,
+        description: task.description || '',
+        projectId: task.project?._id || task.project || '',
+        assignedTo: assignedIds,
+        priority: task.priority || 'medium',
+        status: task.status || 'not_started',
+        estimatedHours: task.estimatedHours || 0,
+        startDate: task.startDate ? format(new Date(task.startDate), 'yyyy-MM-dd') : '',
+        dueDate: task.dueDate ? format(new Date(task.dueDate), 'yyyy-MM-dd') : '',
+        tags: Array.isArray(task.tags) ? task.tags.join(', ') : (task.tags || ''),
+      });
 
-    setSubtasks(task.subtasks || []);
-    loadComments(task._id);
-  }, [task]);
-
-  // Si assignedTo change (par ex. après add/remove), on (re)charge les objets manquants
-  useEffect(() => {
-    const fetchMissingUsers = async () => {
-      const ids = formData.assignedTo || [];
-      if (ids.length === 0) {
-        setAssignedUsers([]);
-        return;
-      }
-      // Evite de refetch ceux qu'on a déjà
-      const knownIds = new Set(assignedUsers.map((u) => u._id));
-      const toFetch = ids.filter((id) => !knownIds.has(id));
-      if (toFetch.length === 0) return;
-
-      try {
-        // usersAPI.search peut renvoyer par nom, on le détourne pour id exact si possible
-        // Si tu as un endpoint usersAPI.getById, remplace par des fetchs par ID.
-        const fetched = [];
-        for (const id of toFetch) {
-          const res = await usersAPI.search(id);
-          const arr = res?.data?.data || [];
-          // on prend soit un match exact par _id, soit le premier
-          const found = arr.find((u) => u._id === id) || arr[0];
-          if (found) fetched.push(found);
+      // Alimenter assignedUsers :
+      // - si déjà peuplé dans la tâche, on prend tel quel
+      // - sinon on récupère chaque profil
+      let users = (task.assignedTo || []).filter((u) => typeof u === 'object');
+      if (users.length !== assignedIds.length) {
+        try {
+          const fetched = await Promise.all(
+            assignedIds.map(async (id) => {
+              try {
+                // On suppose qu'il existe usersAPI.getOne(id)
+                const r = await usersAPI.getOne(id);
+                return r?.data?.data;
+              } catch {
+                return null;
+              }
+            })
+          );
+          users = fetched.filter(Boolean);
+        } catch {
+          // ignore
         }
-        if (fetched.length > 0) {
-          setAssignedUsers((prev) => {
-            // fusion sans doublons
-            const map = new Map(prev.map((u) => [u._id, u]));
-            fetched.forEach((u) => map.set(u._id, u));
-            // ne garder que ceux présents dans formData.assignedTo (ordre idem)
-            return (formData.assignedTo || [])
-              .map((id) => map.get(id))
-              .filter(Boolean);
-          });
-        }
-      } catch (e) {
-        // Pas bloquant pour l'UI
       }
+      setAssignedUsers(users);
+
+      // Sous-tâches et commentaires
+      setSubtasks(task.subtasks || []);
+      await loadComments(task._id);
     };
 
-    fetchMissingUsers();
+    fillFromTask();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formData.assignedTo]);
+  }, [task]);
 
-  // ===========================
-  // Commentaires
-  // ===========================
+  /* ================================
+   * Commentaires
+   * ================================ */
   const loadComments = async (taskId) => {
     if (!taskId) return;
     try {
       const res = await commentsAPI.getForTask(taskId);
-      setComments(res.data.data || []);
+      setComments(res?.data?.data || []);
     } catch (e) {
       console.error('Failed to load comments:', e);
     }
   };
 
-  // ===========================
-  // Sauvegarde tâche
-  // ===========================
+  /* ================================
+   * Sauvegarde / suppression
+   * ================================ */
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-
     try {
       const payload = {
         ...formData,
         tags: formData.tags
-          ? formData.tags
-              .split(',')
-              .map((t) => t.trim())
-              .filter(Boolean)
+          ? formData.tags.split(',').map((t) => t.trim()).filter(Boolean)
           : [],
       };
 
@@ -171,15 +149,12 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
       }
       onSave();
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Une erreur est survenue');
+      toast.error(error?.response?.data?.message || 'Une erreur est survenue');
     } finally {
       setLoading(false);
     }
   };
 
-  // ===========================
-  // Suppression tâche
-  // ===========================
   const deleteTask = async () => {
     if (!task || !window.confirm('Voulez-vous vraiment supprimer cette tâche ?')) return;
     try {
@@ -191,16 +166,16 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
     }
   };
 
-  // ===========================
-  // Sous-tâches
-  // ===========================
+  /* ================================
+   * Sous-tâches
+   * ================================ */
   const addSubtask = async () => {
     if (!newSubtask.trim() || !task) return;
     try {
       await tasksAPI.addSubtask(task._id, newSubtask.trim());
       setNewSubtask('');
       const refreshed = await tasksAPI.getOne(task._id);
-      setSubtasks(refreshed.data.data.subtasks || []);
+      setSubtasks(refreshed?.data?.data?.subtasks || []);
       toast.success('Sous-tâche ajoutée');
     } catch {
       toast.error("Erreur lors de l'ajout");
@@ -212,29 +187,32 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
     try {
       await tasksAPI.toggleSubtask(task._id, subtaskId);
       const refreshed = await tasksAPI.getOne(task._id);
-      setSubtasks(refreshed.data.data.subtasks || []);
+      setSubtasks(refreshed?.data?.data?.subtasks || []);
     } catch {
       toast.error('Erreur');
     }
   };
 
-  // ===========================
-  // Mentions @ + suggestions
-  // ===========================
+  /* ================================
+   * Mentions (@) – suggestions
+   * ================================ */
   const updateMentionSuggestions = async (value) => {
-    const input = commentInputRef.current;
-    const caretPos = input?.selectionStart ?? value.length;
-    const beforeCaret = value.slice(0, caretPos);
-    // Détecte "@..." sans espace
-    const match = beforeCaret.match(/@([A-Za-zÀ-ÖØ-öø-ÿ0-9_-]{1,30})$/);
+    // texte jusqu’au curseur
+    const caret = commentInputRef.current?.selectionStart ?? value.length;
+    const before = value.slice(0, caret);
 
-    if (!match) {
-      setMentionSuggestions([]);
+    // On capture "@mot" juste avant le curseur (accents / chiffres / _ / - inclus)
+    const m = before.match(/@([A-Za-zÀ-ÖØ-öø-ÿ0-9_-]{1,30})$/);
+    if (!m) {
       setShowMentionBox(false);
+      setMentionQuery('');
+      setMentionSuggestions([]);
       return;
     }
 
-    const q = match[1];
+    const q = m[1];
+    setMentionQuery(q);
+
     try {
       const res = await usersAPI.search(q);
       const items = res?.data?.data || [];
@@ -251,24 +229,30 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
     if (!input) return;
 
     const value = newComment;
-    const caretPos = input.selectionStart ?? value.length;
-    const beforeCaret = value.slice(0, caretPos);
-    const afterCaret = value.slice(caretPos);
+    const caret = input.selectionStart ?? value.length;
+    const before = value.slice(0, caret);
+    const after = value.slice(caret);
 
-    const match = beforeCaret.match(/@([A-Za-zÀ-ÖØ-öø-ÿ0-9_-]{1,30})$/);
-    if (!match) return;
+    const m = before.match(/@([A-Za-zÀ-ÖØ-öø-ÿ0-9_-]{1,30})$/);
+    if (!m) return;
 
-    const start = beforeCaret.lastIndexOf('@' + match[1]);
-    const mentionText = '@' + (user.firstName || '');
-    const newValue = beforeCaret.slice(0, start) + mentionText + ' ' + afterCaret;
+    const startIdx = before.lastIndexOf('@' + m[1]);
 
-    setNewComment(newValue);
-    setMentionSuggestions([]);
+    // On insère @Prénom et un espace pour continuer à écrire
+    const label = `@${user.firstName || ''} `;
+    const next = before.slice(0, startIdx) + label + after;
+
+    setNewComment(next);
     setShowMentionBox(false);
+    setMentionSuggestions([]);
+    // On retient l’ID pour l’envoi
+    setMentionIdsSelected((prev) =>
+      prev.includes(user._id) ? prev : [...prev, user._id]
+    );
 
-    // replacer le caret juste après la mention
+    // replacer le curseur
     setTimeout(() => {
-      const pos = (beforeCaret.slice(0, start) + mentionText + ' ').length;
+      const pos = (before.slice(0, startIdx) + label).length;
       input.setSelectionRange(pos, pos);
       input.focus();
     }, 0);
@@ -278,32 +262,34 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
     if (!newComment.trim() || !task) return;
 
     try {
-      // Récupère tous les @tokens tapés
-      const tokens = newComment.match(/@([A-Za-zÀ-ÖØ-öø-ÿ0-9_-]+)/g) || [];
-      const unique = [...new Set(tokens.map((t) => t.substring(1)))];
+      // 1) IDs ajoutés via la popup
+      const idsFromPopup = [...new Set(mentionIdsSelected)];
 
-      const mentionedUserIds = [];
+      // 2) Mentions tapées manuellement : on essaie de les résoudre
+      const matches = newComment.match(/@([A-Za-zÀ-ÖØ-öø-ÿ0-9_-]+)/g) || [];
+      const tokens = [...new Set(matches.map((m) => m.substring(1)))];
 
-      // Résout chaque token vers un userId (via usersAPI.search)
-      for (const token of unique) {
+      const idsFromText = [];
+      for (const token of tokens) {
         try {
-          const res = await usersAPI.search(token);
-          const found = res?.data?.data || [];
-          if (found.length > 0) {
-            mentionedUserIds.push(found[0]._id);
-          }
+          const r = await usersAPI.search(token);
+          const found = r?.data?.data || [];
+          if (found[0]?. _id) idsFromText.push(found[0]._id);
         } catch {
           // ignore
         }
       }
 
+      const mentions = [...new Set([...idsFromPopup, ...idsFromText])];
+
       await commentsAPI.create({
         taskId: task._id,
         content: newComment,
-        mentions: mentionedUserIds, // le backend créera les notifications
+        mentions, // le backend enverra les notifications à ces IDs
       });
 
       setNewComment('');
+      setMentionIdsSelected([]);
       await loadComments(task._id);
       toast.success('Commentaire ajouté');
     } catch {
@@ -311,9 +297,9 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
     }
   };
 
-  // ===========================
-  // Assignation
-  // ===========================
+  /* ================================
+   * Recherche / Assignation
+   * ================================ */
   const searchUsers = async (query) => {
     if (!query || query.trim().length < 2) {
       setSearchResults([]);
@@ -321,7 +307,7 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
     }
     try {
       const res = await usersAPI.search(query.trim());
-      setSearchResults(res.data.data || []);
+      setSearchResults(res?.data?.data || []);
     } catch (e) {
       console.error('Search error:', e);
     }
@@ -329,14 +315,14 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
 
   const addAssignee = (user) => {
     const id = user._id;
-    if (!formData.assignedTo.includes(id)) {
-      setFormData((s) => ({ ...s, assignedTo: [...s.assignedTo, id] }));
-      setAssignedUsers((arr) => {
-        // évite les doublons visuels
-        if (arr.find((u) => u._id === id)) return arr;
-        return [...arr, user];
-      });
-    }
+    // maj IDs
+    setFormData((s) =>
+      s.assignedTo.includes(id) ? s : { ...s, assignedTo: [...s.assignedTo, id] }
+    );
+    // maj objets pour l’affichage
+    setAssignedUsers((list) =>
+      list.find((u) => u._id === id) ? list : [...list, user]
+    );
     setSearchQuery('');
     setSearchResults([]);
   };
@@ -346,18 +332,20 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
       ...s,
       assignedTo: s.assignedTo.filter((id) => id !== userId),
     }));
-    setAssignedUsers((arr) => arr.filter((u) => u._id !== userId));
+    setAssignedUsers((list) => list.filter((u) => u._id !== userId));
   };
 
-  // ===========================
-  // Rendu
-  // ===========================
+  /* ================================
+   * Rendu
+   * ================================ */
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-          <h2 className="text-xl font-bold">{task ? 'Modifier la tâche' : 'Nouvelle tâche'}</h2>
+          <h2 className="text-xl font-bold">
+            {task ? 'Modifier la tâche' : 'Nouvelle tâche'}
+          </h2>
           <div className="flex items-center space-x-2">
             {task && (
               <button
@@ -368,7 +356,11 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
                 <Trash2 className="w-5 h-5" />
               </button>
             )}
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600" title="Fermer">
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600"
+              title="Fermer"
+            >
               <X className="w-6 h-6" />
             </button>
           </div>
@@ -379,11 +371,15 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Titre */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Titre</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Titre
+              </label>
               <input
                 type="text"
                 value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, title: e.target.value })
+                }
                 className="input text-lg font-semibold"
                 required
               />
@@ -392,10 +388,14 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
             {/* Projet & Statut */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Projet</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Projet
+                </label>
                 <select
                   value={formData.projectId}
-                  onChange={(e) => setFormData({ ...formData, projectId: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, projectId: e.target.value })
+                  }
                   className="input"
                   required
                 >
@@ -407,12 +407,15 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
                   ))}
                 </select>
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Statut</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Statut
+                </label>
                 <select
                   value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, status: e.target.value })
+                  }
                   className="input"
                 >
                   <option value="not_started">Non démarrée</option>
@@ -424,10 +427,14 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
 
             {/* Description */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Description
+              </label>
               <textarea
                 value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, description: e.target.value })
+                }
                 className="input"
                 rows={4}
               />
@@ -436,10 +443,14 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
             {/* Priorité & Estimation */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Priorité</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Priorité
+                </label>
                 <select
                   value={formData.priority}
-                  onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, priority: e.target.value })
+                  }
                   className="input"
                 >
                   <option value="low">Basse</option>
@@ -448,7 +459,6 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
                   <option value="urgent">Urgente</option>
                 </select>
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
                   <Clock className="w-4 h-4 mr-1" />
@@ -480,11 +490,12 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
                 <input
                   type="date"
                   value={formData.startDate}
-                  onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, startDate: e.target.value })
+                  }
                   className="input"
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
                   <CalendarIcon className="w-4 h-4 mr-1" />
@@ -493,7 +504,9 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
                 <input
                   type="date"
                   value={formData.dueDate}
-                  onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, dueDate: e.target.value })
+                  }
                   className="input"
                 />
               </div>
@@ -517,7 +530,7 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
                     searchUsers(q);
                   }}
                   className="input"
-                  placeholder="Rechercher un utilisateur..."
+                  placeholder="Rechercher un utilisateur…"
                 />
                 {searchResults.length > 0 && (
                   <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
@@ -528,8 +541,9 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
                         onClick={() => addAssignee(user)}
                         className="w-full flex items-center px-4 py-2 hover:bg-gray-100 text-left"
                       >
-                        <div className="w-8 h-8 rounded-full bg-primary-600 flex items-center justify-center text-white text-sm font-semibold mr-2">
-                          {initialsOf(user)}
+                        <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-white text-sm font-semibold mr-2">
+                          {(user.firstName || '?')[0]}
+                          {(user.lastName || '')[0]}
                         </div>
                         <div>
                           <p className="font-medium">
@@ -543,7 +557,7 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
                 )}
               </div>
 
-              {/* Chips des assignés (noms + initiales) */}
+              {/* Chips des assignés */}
               {assignedUsers.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {assignedUsers.map((u) => (
@@ -551,7 +565,10 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
                       key={u._id}
                       className="inline-flex items-center px-2 py-1 rounded-full bg-purple-50 text-purple-700 text-xs border border-purple-200"
                     >
-                      <span className="mr-1 font-semibold">{initialsOf(u)}</span>
+                      <span className="mr-1 font-semibold">
+                        {(u.firstName || '?')[0]}
+                        {(u.lastName || '')[0]}
+                      </span>
                       {u.firstName} {u.lastName}
                       <button
                         type="button"
@@ -577,7 +594,9 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
               <input
                 type="text"
                 value={formData.tags}
-                onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, tags: e.target.value })
+                }
                 className="input"
                 placeholder="frontend, urgent, bug"
               />
@@ -586,7 +605,9 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
             {/* Sous-tâches */}
             {task && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Sous-tâches</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Sous-tâches
+                </label>
 
                 <div className="space-y-2 mb-2">
                   {subtasks.map((subtask) => (
@@ -598,11 +619,19 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
                         type="button"
                         onClick={() => toggleSubtask(subtask._id)}
                         className={`w-5 h-5 rounded border-2 mr-3 flex items-center justify-center ${
-                          subtask.isCompleted ? 'bg-green-500 border-green-500' : 'border-gray-300'
+                          subtask.isCompleted
+                            ? 'bg-green-500 border-green-500'
+                            : 'border-gray-300'
                         }`}
-                        title={subtask.isCompleted ? 'Marquée terminée' : 'Marquer comme fait'}
+                        title={
+                          subtask.isCompleted
+                            ? 'Marquée terminée'
+                            : 'Marquer comme fait'
+                        }
                       >
-                        {subtask.isCompleted && <Check className="w-3 h-3 text-white" />}
+                        {subtask.isCompleted && (
+                          <Check className="w-3 h-3 text-white" />
+                        )}
                       </button>
                       <span
                         className={`flex-1 ${
@@ -621,7 +650,7 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
                     value={newSubtask}
                     onChange={(e) => setNewSubtask(e.target.value)}
                     className="input"
-                    placeholder="Nouvelle sous-tâche..."
+                    placeholder="Nouvelle sous-tâche…"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
@@ -629,7 +658,11 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
                       }
                     }}
                   />
-                  <button type="button" onClick={addSubtask} className="btn btn-secondary">
+                  <button
+                    type="button"
+                    onClick={addSubtask}
+                    className="btn btn-secondary"
+                  >
                     <Plus className="w-5 h-5" />
                   </button>
                 </div>
@@ -646,30 +679,39 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
 
                 <div className="space-y-3 mb-3 max-h-64 overflow-y-auto">
                   {comments.map((comment) => (
-                    <div key={comment._id} className="p-3 border border-gray-200 rounded-lg">
+                    <div
+                      key={comment._id}
+                      className="p-3 border border-gray-200 rounded-lg"
+                    >
                       <div className="flex items-center mb-2">
                         <div className="w-8 h-8 rounded-full bg-primary-600 flex items-center justify-center text-white text-xs font-semibold mr-2">
-                          {initialsOf(comment.user)}
+                          {(comment.user?.firstName || '?')[0]}
+                          {(comment.user?.lastName || '')[0]}
                         </div>
                         <div className="flex-1">
                           <p className="text-sm font-medium">
                             {comment.user?.firstName} {comment.user?.lastName}
                           </p>
                           <p className="text-xs text-gray-500">
-                            {format(new Date(comment.createdAt), 'dd MMM yyyy à HH:mm', {
-                              locale: fr,
-                            })}
+                            {format(
+                              new Date(comment.createdAt),
+                              'dd MMM yyyy à HH:mm',
+                              { locale: fr }
+                            )}
                           </p>
                         </div>
                       </div>
 
-                      {/* Mise en évidence des mentions */}
+                      {/* Mise en évidence des @mentions */}
                       <p className="text-sm text-gray-700">
                         {comment.content
                           .split(/(@[A-Za-zÀ-ÖØ-öø-ÿ0-9_-]+)/g)
                           .map((part, i) =>
                             part.startsWith('@') ? (
-                              <span key={i} className="text-blue-600 font-medium">
+                              <span
+                                key={i}
+                                className="text-blue-600 font-medium"
+                              >
                                 {part}
                               </span>
                             ) : (
@@ -681,7 +723,7 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
                   ))}
                 </div>
 
-                {/* Input commentaire + suggestions @ */}
+                {/* Champ commentaire + suggestions */}
                 <div className="relative">
                   <div className="flex space-x-2">
                     <input
@@ -689,44 +731,57 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
                       type="text"
                       value={newComment}
                       onChange={(e) => {
-                        setNewComment(e.target.value);
-                        updateMentionSuggestions(e.target.value);
+                        const v = e.target.value;
+                        setNewComment(v);
+                        updateMentionSuggestions(v);
                       }}
-                      className="input"
+                      className="input w-full"
                       placeholder="Ajouter un commentaire… (tape @Prénom pour mentionner)"
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault();
                           addComment();
                         }
-                        // navigation au clavier dans la liste si besoin (optionnel)
                       }}
                     />
-                    <button type="button" onClick={addComment} className="btn btn-secondary">
+                    <button
+                      type="button"
+                      onClick={addComment}
+                      className="btn btn-secondary"
+                      title="Envoyer"
+                    >
                       <MessageSquare className="w-5 h-5" />
                     </button>
                   </div>
 
                   {showMentionBox && mentionSuggestions.length > 0 && (
-                    <div className="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                      {mentionSuggestions.map((u) => (
-                        <button
-                          key={u._id}
-                          type="button"
-                          onClick={() => insertMention(u)}
-                          className="w-full flex items-center px-4 py-2 hover:bg-gray-100 text-left"
-                        >
-                          <div className="w-8 h-8 rounded-full bg-primary-600 flex items-center justify-center text-white text-sm font-semibold mr-2">
-                            {initialsOf(u)}
-                          </div>
-                          <div>
-                            <p className="font-medium">
-                              {u.firstName} {u.lastName}
-                            </p>
-                            <p className="text-xs text-gray-500">{u.email}</p>
-                          </div>
-                        </button>
-                      ))}
+                    <div className="absolute left-0 mt-1 w-full max-w-xl bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-56 overflow-y-auto">
+                      <div className="p-2 text-xs text-gray-500">
+                        Suggestions pour « {mentionQuery} »
+                      </div>
+                      <div className="divide-y divide-gray-100">
+                        {mentionSuggestions.map((u) => (
+                          <button
+                            key={u._id}
+                            type="button"
+                            onClick={() => insertMention(u)}
+                            className="w-full flex items-center px-3 py-2 text-left hover:bg-gray-50"
+                          >
+                            <div className="w-8 h-8 rounded-full bg-primary-600 flex items-center justify-center text-white text-sm font-semibold mr-2">
+                              {(u.firstName || '?')[0]}
+                              {(u.lastName || '')[0]}
+                            </div>
+                            <div className="flex-1">
+                              <div className="text-sm font-medium">
+                                {u.firstName} {u.lastName}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                {u.email}
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -743,8 +798,11 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
                 <Save className="w-5 h-5 mr-2" />
                 {task ? 'Mettre à jour' : 'Créer'}
               </button>
-
-              <button type="button" onClick={onClose} className="flex-1 btn btn-secondary">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 btn btn-secondary"
+              >
                 Annuler
               </button>
             </div>
