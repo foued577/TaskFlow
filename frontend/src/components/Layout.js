@@ -1,8 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { toast } from 'react-toastify';
-import socket from '../utils/socket';
 import {
   LayoutDashboard,
   Users,
@@ -22,36 +20,6 @@ const Layout = () => {
   const { user, logout } = useAuth();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [notificationTrigger, setNotificationTrigger] = useState(0);
-
-  // 🔌 Connexion Socket.io et écoute des notifications en temps réel
-  useEffect(() => {
-    if (!user) return;
-
-    // Connexion au socket
-    socket.connect();
-
-    // 🎯 Écouter les nouvelles notifications et afficher un toast
-    socket.on('notification:new', (data) => {
-      console.log('🔔 Notification reçue:', data);
-      
-      // Afficher le toast instantané
-      toast.info(data.message, {
-        position: 'top-right',
-        autoClose: 4000,
-        pauseOnHover: true,
-      });
-
-      // Déclencher le rechargement des notifications dans le dropdown
-      setNotificationTrigger(prev => prev + 1);
-    });
-
-    // Nettoyage à la déconnexion
-    return () => {
-      socket.off('notification:new');
-      socket.disconnect();
-    };
-  }, [user]);
 
   const navigation = [
     { name: 'Tableau de bord', path: '/', icon: LayoutDashboard },
@@ -182,7 +150,7 @@ const Layout = () => {
               </button>
               <div className="flex-1" />
               <div className="flex items-center space-x-4">
-                <NotificationDropdown trigger={notificationTrigger} />
+                <NotificationDropdown />
                 <Link to="/profile" className="md:hidden">
                   <div className="w-8 h-8 rounded-full bg-primary-600 flex items-center justify-center text-white text-sm font-semibold">
                     {user?.firstName?.charAt(0)}{user?.lastName?.charAt(0)}
