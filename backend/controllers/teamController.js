@@ -2,7 +2,6 @@ const Team = require('../models/Team');
 const User = require('../models/User');
 const History = require('../models/History');
 const Notification = require('../models/Notification');
-const { emitNotification } = require('../utils/socketHelper');
 
 // @desc    Create new team
 // @route   POST /api/teams
@@ -29,7 +28,6 @@ exports.createTeam = async (req, res) => {
 
     // Add additional members if provided
     if (memberIds && Array.isArray(memberIds)) {
-      const io = req.app.get('io');
       for (const memberId of memberIds) {
         if (memberId !== req.user.id.toString()) {
           team.members.push({ user: memberId });
@@ -40,7 +38,7 @@ exports.createTeam = async (req, res) => {
           });
 
           // Create notification
-          const notification = await Notification.create({
+          await Notification.create({
             recipient: memberId,
             sender: req.user.id,
             type: 'team_added',
@@ -48,8 +46,6 @@ exports.createTeam = async (req, res) => {
             message: `You have been added to team "${name}"`,
             relatedTeam: team._id
           });
-          // 🔔 Émettre la notification via Socket.io
-          emitNotification(io, notification);
         }
       }
       await team.save();
@@ -242,8 +238,7 @@ exports.addMember = async (req, res) => {
     });
 
     // Create notification
-    const io = req.app.get('io');
-    const notification = await Notification.create({
+    await Notification.create({
       recipient: userId,
       sender: req.user.id,
       type: 'team_added',
@@ -251,8 +246,6 @@ exports.addMember = async (req, res) => {
       message: `You have been added to team "${team.name}"`,
       relatedTeam: team._id
     });
-    // 🔔 Émettre la notification via Socket.io
-    emitNotification(io, notification);
 
     const updatedTeam = await Team.findById(team._id)
       .populate('members.user', 'firstName lastName email avatar');
