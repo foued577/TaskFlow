@@ -4,7 +4,6 @@ const Team = require('../models/Team');
 const History = require('../models/History');
 const Notification = require('../models/Notification');
 const mongoose = require('mongoose');
-const { emitNotification } = require('../utils/socketHelper');
 
 // @desc Create new task
 // @route POST /api/tasks
@@ -48,10 +47,9 @@ exports.createTask = async (req, res) => {
     });
 
     if (assignedTo && assignedTo.length > 0) {
-      const io = req.app.get('io');
       for (const userId of assignedTo) {
         if (userId !== req.user.id) {
-          const notification = await Notification.create({
+          await Notification.create({
             recipient: userId,
             sender: req.user.id,
             type: 'task_assigned',
@@ -60,8 +58,6 @@ exports.createTask = async (req, res) => {
             relatedTask: task._id,
             relatedProject: projectId
           });
-          // 🔔 Émettre la notification via Socket.io
-          emitNotification(io, notification);
         }
       }
     }
@@ -210,10 +206,9 @@ exports.updateTask = async (req, res) => {
     });
 
     if (oldStatus !== task.status) {
-      const io = req.app.get('io');
       const assignedUsers = task.assignedTo.filter(id => id.toString() !== req.user.id);
       for (const userId of assignedUsers) {
-        const notification = await Notification.create({
+        await Notification.create({
           recipient: userId,
           sender: req.user.id,
           type: 'task_updated',
@@ -222,17 +217,14 @@ exports.updateTask = async (req, res) => {
           relatedTask: task._id,
           relatedProject: task.project
         });
-        // 🔔 Émettre la notification via Socket.io
-        emitNotification(io, notification);
       }
     }
 
     if (req.body.assignedTo) {
-      const io = req.app.get('io');
       const newAssignees = task.assignedTo.filter(id => !oldAssignedTo.includes(id.toString()));
       for (const userId of newAssignees) {
         if (userId.toString() !== req.user.id) {
-          const notification = await Notification.create({
+          await Notification.create({
             recipient: userId,
             sender: req.user.id,
             type: 'task_assigned',
@@ -241,8 +233,6 @@ exports.updateTask = async (req, res) => {
             relatedTask: task._id,
             relatedProject: task.project
           });
-          // 🔔 Émettre la notification via Socket.io
-          emitNotification(io, notification);
         }
       }
     }
