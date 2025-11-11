@@ -5,7 +5,7 @@ import { toast } from 'react-toastify';
 import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
-const NotificationDropdown = ({ trigger }) => {
+const NotificationDropdown = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -28,13 +28,6 @@ const NotificationDropdown = ({ trigger }) => {
     const interval = setInterval(loadNotifications, 10000); // refresh every 10s
     return () => clearInterval(interval);
   }, []);
-
-  // ✅ Recharger quand une nouvelle notification arrive via Socket.io
-  useEffect(() => {
-    if (trigger > 0) {
-      loadNotifications();
-    }
-  }, [trigger]);
 
   // ✅ Fermer lorsqu’on clique en dehors
   useEffect(() => {
