@@ -2,6 +2,7 @@ const Project = require('../models/Project');
 const Team = require('../models/Team');
 const History = require('../models/History');
 const Notification = require('../models/Notification');
+const { emitNotification } = require('../utils/socketHelper');
 
 // @desc    Create new project
 // @route   POST /api/projects
@@ -57,9 +58,10 @@ exports.createProject = async (req, res) => {
     });
 
     // Notify team members
+    const io = req.app.get('io');
     const memberIds = team.members.map(m => m.user.toString()).filter(id => id !== req.user.id);
     for (const memberId of memberIds) {
-      await Notification.create({
+      const notification = await Notification.create({
         recipient: memberId,
         sender: req.user.id,
         type: 'project_added',
@@ -68,6 +70,8 @@ exports.createProject = async (req, res) => {
         relatedProject: project._id,
         relatedTeam: teamId
       });
+      // 🔔 Émettre la notification via Socket.io
+      emitNotification(io, notification);
     }
 
     const populatedProject = await Project.findById(project._id)
