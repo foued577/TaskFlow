@@ -2,7 +2,6 @@ const Comment = require('../models/Comment');
 const Task = require('../models/Task');
 const Notification = require('../models/Notification');
 const History = require('../models/History');
-const { emitNotification } = require('../utils/socketHelper');
 
 // @desc    Create comment
 // @route   POST /api/comments
@@ -44,10 +43,9 @@ exports.createComment = async (req, res) => {
     });
 
     // Notify task assignees
-    const io = req.app.get('io');
     for (const userId of task.assignedTo) {
       if (userId.toString() !== req.user.id) {
-        const notification = await Notification.create({
+        await Notification.create({
           recipient: userId,
           sender: req.user.id,
           type: 'comment_added',
@@ -56,8 +54,6 @@ exports.createComment = async (req, res) => {
           relatedTask: taskId,
           relatedProject: task.project
         });
-        // 🔔 Émettre la notification via Socket.io
-        emitNotification(io, notification);
       }
     }
 
@@ -65,7 +61,7 @@ exports.createComment = async (req, res) => {
     if (mentions && mentions.length > 0) {
       for (const userId of mentions) {
         if (userId !== req.user.id) {
-          const notification = await Notification.create({
+          await Notification.create({
             recipient: userId,
             sender: req.user.id,
             type: 'mention',
@@ -74,8 +70,6 @@ exports.createComment = async (req, res) => {
             relatedTask: taskId,
             relatedProject: task.project
           });
-          // 🔔 Émettre la notification via Socket.io
-          emitNotification(io, notification);
         }
       }
     }
