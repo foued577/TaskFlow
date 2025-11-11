@@ -5,12 +5,9 @@ const helmet = require('helmet');
 const compression = require('compression');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
-const http = require('http');
-const { Server } = require('socket.io');
 require('dotenv').config();
 
 const app = express();
-const server = http.createServer(app);
 
 // ✅ Pour Render : faire confiance au proxy HTTPS
 app.set('trust proxy', 1);
@@ -139,42 +136,16 @@ app.use((err, req, res, next) => {
 // 🚫 404
 app.use((req, res) => res.status(404).json({ success: false, message: 'Route not found' }));
 
-// 🔌 Configuration Socket.io
-const io = new Server(server, {
-  cors: {
-    origin: allowedOrigins,
-    methods: ['GET', 'POST'],
-    credentials: true,
-  },
-  transports: ['websocket', 'polling'],
-});
-
-// Stocker io dans app pour y accéder depuis les routes
-app.set('io', io);
-
-// Gestion des connexions Socket.io
-io.on('connection', (socket) => {
-  console.log('✅ Client connecté:', socket.id);
-
-  socket.on('disconnect', (reason) => {
-    console.log('⚠️ Client déconnecté:', socket.id, 'Raison:', reason);
-  });
-});
-
 // 🚀 Démarrage serveur
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📊 Environment: ${process.env.NODE_ENV}`);
-  console.log(`🔌 Socket.io ready`);
 });
 
 // 🧹 Arrêt propre
 const shutdown = async (signal) => {
   console.log(`\n⚠️ ${signal} reçu, fermeture du serveur...`);
-  io.close(() => {
-    console.log('🔒 Socket.io closed');
-  });
   server.close(async () => {
     console.log('🔒 HTTP server closed');
     await mongoose.connection.close();
