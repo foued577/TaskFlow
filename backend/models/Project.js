@@ -11,11 +11,14 @@ const projectSchema = new mongoose.Schema({
     default: '',
     maxlength: 2000
   },
-  team: {
+  
+  // ✅ Plusieurs équipes (au lieu d’une seule)
+  teams: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Team',
     required: true
-  },
+  }],
+
   startDate: {
     type: Date,
     default: null
@@ -51,8 +54,8 @@ const projectSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Indexes
-projectSchema.index({ team: 1, status: 1 });
+// ✅ Index mis à jour
+projectSchema.index({ teams: 1, status: 1 });
 projectSchema.index({ createdBy: 1 });
 
 module.exports = mongoose.model('Project', projectSchema);
