@@ -8,36 +8,40 @@ const Notification = require('../models/Notification');
 // @access  Private
 exports.createProject = async (req, res) => {
   try {
-    const { name, description, teamId, startDate, endDate, priority, color, tags } = req.body;
+    const { name, description, teams, startDate, endDate, priority, color, tags } = req.body;
 
-    if (!name || !teamId) {
+    if (!name || !teams || teams.length === 0) {
       return res.status(400).json({
         success: false,
-        message: 'Project name and team are required'
+        message: 'Project name and at least one team are required'
       });
     }
 
-    // Verify team exists and user is member
-    const team = await Team.findById(teamId);
-    if (!team) {
+    // ✅ Vérifie que toutes les équipes existent
+    const foundTeams = await Team.find({ _id: { $in: teams } });
+    if (foundTeams.length !== teams.length) {
       return res.status(404).json({
         success: false,
-        message: 'Team not found'
+        message: 'One or more teams not found'
       });
     }
 
-    const isMember = team.members.some(m => m.user.toString() === req.user.id);
+    // ✅ Vérifie que l’utilisateur est membre d’au moins une équipe
+    const isMember = foundTeams.some(team =>
+      team.members.some(m => m.user.toString() === req.user.id)
+    );
     if (!isMember) {
       return res.status(403).json({
         success: false,
-        message: 'Not authorized to create project for this team'
+        message: 'Not authorized to create a project for these teams'
       });
     }
 
+    // ✅ Crée le projet
     const project = await Project.create({
       name,
       description,
-      team: teamId,
+      teams,
       startDate,
       endDate,
       priority: priority || 'medium',
@@ -46,7 +50,7 @@ exports.createProject = async (req, res) => {
       createdBy: req.user.id
     });
 
-    // Create history entry
+    // ✅ Historique
     await History.create({
       user: req.user.id,
       action: 'created',
@@ -56,22 +60,24 @@ exports.createProject = async (req, res) => {
       project: project._id
     });
 
-    // Notify team members
-    const memberIds = team.members.map(m => m.user.toString()).filter(id => id !== req.user.id);
-    for (const memberId of memberIds) {
-      await Notification.create({
-        recipient: memberId,
-        sender: req.user.id,
-        type: 'project_added',
-        title: 'New project created',
-        message: `${req.user.firstName} created project "${name}"`,
-        relatedProject: project._id,
-        relatedTeam: teamId
-      });
+    // ✅ Notifie les membres de chaque équipe
+    for (const team of foundTeams) {
+      const memberIds = team.members.map(m => m.user.toString()).filter(id => id !== req.user.id);
+      for (const memberId of memberIds) {
+        await Notification.create({
+          recipient: memberId,
+          sender: req.user.id,
+          type: 'project_added',
+          title: 'Nouveau projet créé',
+          message: `${req.user.firstName} a créé le projet "${name}"`,
+          relatedProject: project._id,
+          relatedTeam: team._id
+        });
+      }
     }
 
     const populatedProject = await Project.findById(project._id)
-      .populate('team', 'name color')
+      .populate('teams', 'name color')
       .populate('createdBy', 'firstName lastName');
 
     res.status(201).json({
@@ -93,24 +99,20 @@ exports.createProject = async (req, res) => {
 exports.getProjects = async (req, res) => {
   try {
     const { teamId, status } = req.query;
-
     let query = {};
 
     if (teamId) {
-      query.team = teamId;
+      query.teams = teamId;
     } else {
-      // Get all teams user is member of
       const teams = await Team.find({ 'members.user': req.user.id });
       const teamIds = teams.map(t => t._id);
-      query.team = { $in: teamIds };
+      query.teams = { $in: teamIds };
     }
 
-    if (status) {
-      query.status = status;
-    }
+    if (status) query.status = status;
 
     const projects = await Project.find(query)
-      .populate('team', 'name color')
+      .populate('teams', 'name color')
       .populate('createdBy', 'firstName lastName')
       .sort('-createdAt');
 
@@ -134,7 +136,7 @@ exports.getProjects = async (req, res) => {
 exports.getProject = async (req, res) => {
   try {
     const project = await Project.findById(req.params.id)
-      .populate('team')
+      .populate('teams')
       .populate('createdBy', 'firstName lastName');
 
     if (!project) {
@@ -144,9 +146,11 @@ exports.getProject = async (req, res) => {
       });
     }
 
-    // Check if user is team member
-    const team = await Team.findById(project.team);
-    const isMember = team.members.some(m => m.user.toString() === req.user.id);
+    // ✅ Vérifie si l’utilisateur est membre d’au moins une équipe liée
+    const teams = await Team.find({ _id: { $in: project.teams } });
+    const isMember = teams.some(team =>
+      team.members.some(m => m.user.toString() === req.user.id)
+    );
     if (!isMember) {
       return res.status(403).json({
         success: false,
@@ -172,25 +176,20 @@ exports.getProject = async (req, res) => {
 // @access  Private
 exports.updateProject = async (req, res) => {
   try {
-    const { name, description, startDate, endDate, status, priority, color, tags } = req.body;
+    const { name, description, startDate, endDate, status, priority, color, tags, teams } = req.body;
 
     const project = await Project.findById(req.params.id);
-
     if (!project) {
-      return res.status(404).json({
-        success: false,
-        message: 'Project not found'
-      });
+      return res.status(404).json({ success: false, message: 'Project not found' });
     }
 
-    // Check authorization
-    const team = await Team.findById(project.team);
-    const isMember = team.members.some(m => m.user.toString() === req.user.id);
+    // ✅ Vérifie que l’utilisateur est membre d’au moins une équipe du projet
+    const existingTeams = await Team.find({ _id: { $in: project.teams } });
+    const isMember = existingTeams.some(team =>
+      team.members.some(m => m.user.toString() === req.user.id)
+    );
     if (!isMember) {
-      return res.status(403).json({
-        success: false,
-        message: 'Not authorized'
-      });
+      return res.status(403).json({ success: false, message: 'Not authorized' });
     }
 
     if (name) project.name = name;
@@ -201,10 +200,10 @@ exports.updateProject = async (req, res) => {
     if (priority) project.priority = priority;
     if (color) project.color = color;
     if (tags) project.tags = tags;
+    if (teams && Array.isArray(teams)) project.teams = teams;
 
     await project.save();
 
-    // Create history entry
     await History.create({
       user: req.user.id,
       action: 'updated',
@@ -215,7 +214,7 @@ exports.updateProject = async (req, res) => {
     });
 
     const updatedProject = await Project.findById(project._id)
-      .populate('team', 'name color')
+      .populate('teams', 'name color')
       .populate('createdBy', 'firstName lastName');
 
     res.status(200).json({
@@ -237,22 +236,16 @@ exports.updateProject = async (req, res) => {
 exports.deleteProject = async (req, res) => {
   try {
     const project = await Project.findById(req.params.id);
-
     if (!project) {
-      return res.status(404).json({
-        success: false,
-        message: 'Project not found'
-      });
+      return res.status(404).json({ success: false, message: 'Project not found' });
     }
 
-    // Check authorization
-    const team = await Team.findById(project.team);
-    const isMember = team.members.some(m => m.user.toString() === req.user.id);
+    const teams = await Team.find({ _id: { $in: project.teams } });
+    const isMember = teams.some(team =>
+      team.members.some(m => m.user.toString() === req.user.id)
+    );
     if (!isMember) {
-      return res.status(403).json({
-        success: false,
-        message: 'Not authorized'
-      });
+      return res.status(403).json({ success: false, message: 'Not authorized' });
     }
 
     await project.deleteOne();
