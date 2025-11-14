@@ -4,44 +4,40 @@ import { authAPI } from "../utils/api";
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem("user")) || null;
-    } catch {
-      return null;
-    }
-  });
+  const [user, setUser] = useState(
+    JSON.parse(localStorage.getItem("user")) || null
+  );
 
-  // ✅ LOGIN QUI APPELLE L’API CORRECTEMENT
+  // 🔥 Correct login : email + password séparés
   const login = async (email, password) => {
     try {
       const res = await authAPI.login({ email, password });
 
-      localStorage.setItem("token", res.data.token);
-      localStorage.setItem("user", JSON.stringify(res.data.data));
-      setUser(res.data.data);
+      const { token, data } = res.data;
 
+      localStorage.setItem("token", token);
+      localStorage.setItem("user", JSON.stringify(data));
+
+      setUser(data);
       return true;
     } catch (err) {
-      console.error(err);
-      alert(err.response?.data?.message || "Erreur de connexion");
+      console.error("Login failed:", err);
       return false;
     }
   };
 
-  // ✅ REGISTER QUI APPELLE L’API CORRECTEMENT
-  const register = async (form) => {
+  const register = async (formData) => {
     try {
-      const res = await authAPI.register(form);
+      const res = await authAPI.register(formData);
+      const { token, data } = res.data;
 
-      localStorage.setItem("token", res.data.token);
-      localStorage.setItem("user", JSON.stringify(res.data.data));
-      setUser(res.data.data);
+      localStorage.setItem("token", token);
+      localStorage.setItem("user", JSON.stringify(data));
 
+      setUser(data);
       return true;
     } catch (err) {
-      console.error(err);
-      alert(err.response?.data?.message || "Erreur lors de l'inscription");
+      console.error("Register failed:", err);
       return false;
     }
   };
@@ -53,16 +49,12 @@ export const AuthProvider = ({ children }) => {
     window.location.href = "/login";
   };
 
-  const updateUser = (data) => {
-    localStorage.setItem("user", JSON.stringify(data));
-    setUser(data);
-  };
-
   const fetchMe = async () => {
     try {
       const res = await authAPI.getMe();
-      updateUser(res.data.data);
-    } catch {
+      localStorage.setItem("user", JSON.stringify(res.data.data));
+      setUser(res.data.data);
+    } catch (err) {
       logout();
     }
   };
@@ -72,7 +64,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, updateUser }}>
+    <AuthContext.Provider value={{ user, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );
