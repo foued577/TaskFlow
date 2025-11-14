@@ -4,24 +4,45 @@ import { authAPI } from "../utils/api";
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
-
-  // SAFE JSON PARSE — évite le crash
-  const safeParse = (key) => {
+  const [user, setUser] = useState(() => {
     try {
-      const item = localStorage.getItem(key);
-      if (!item || item === "undefined") return null;
-      return JSON.parse(item);
+      const saved = localStorage.getItem("user");
+      return saved ? JSON.parse(saved) : null;
     } catch {
       return null;
     }
+  });
+
+  // 🔥 Fonction REGISTER AJOUTÉE
+  const register = async (data) => {
+    try {
+      const res = await authAPI.register(data);
+
+      // On sauvegarde l’utilisateur
+      localStorage.setItem("token", res.data.token);
+      localStorage.setItem("user", JSON.stringify(res.data.data));
+      setUser(res.data.data);
+
+      return true;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
   };
 
-  const [user, setUser] = useState(() => safeParse("user"));
+  const login = async (data) => {
+    try {
+      const res = await authAPI.login(data);
 
-  const login = (data) => {
-    localStorage.setItem("token", data.token);
-    localStorage.setItem("user", JSON.stringify(data.data));
-    setUser(data.data);
+      localStorage.setItem("token", res.data.token);
+      localStorage.setItem("user", JSON.stringify(res.data.data));
+      setUser(res.data.data);
+
+      return true;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
   };
 
   const logout = () => {
@@ -46,11 +67,15 @@ export const AuthProvider = ({ children }) => {
   };
 
   useEffect(() => {
-    if (localStorage.getItem("token")) fetchMe();
+    if (localStorage.getItem("token")) {
+      fetchMe();
+    }
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, updateUser }}>
+    <AuthContext.Provider
+      value={{ user, login, register, logout, updateUser }}
+    >
       {children}
     </AuthContext.Provider>
   );
