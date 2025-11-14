@@ -6,19 +6,17 @@ const AuthContext = createContext();
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(() => {
     try {
-      const saved = localStorage.getItem("user");
-      return saved ? JSON.parse(saved) : null;
+      return JSON.parse(localStorage.getItem("user")) || null;
     } catch {
       return null;
     }
   });
 
-  // 🔥 Fonction REGISTER AJOUTÉE
-  const register = async (data) => {
+  // ✅ LOGIN QUI APPELLE L’API CORRECTEMENT
+  const login = async (email, password) => {
     try {
-      const res = await authAPI.register(data);
+      const res = await authAPI.login({ email, password });
 
-      // On sauvegarde l’utilisateur
       localStorage.setItem("token", res.data.token);
       localStorage.setItem("user", JSON.stringify(res.data.data));
       setUser(res.data.data);
@@ -26,13 +24,15 @@ export const AuthProvider = ({ children }) => {
       return true;
     } catch (err) {
       console.error(err);
+      alert(err.response?.data?.message || "Erreur de connexion");
       return false;
     }
   };
 
-  const login = async (data) => {
+  // ✅ REGISTER QUI APPELLE L’API CORRECTEMENT
+  const register = async (form) => {
     try {
-      const res = await authAPI.login(data);
+      const res = await authAPI.register(form);
 
       localStorage.setItem("token", res.data.token);
       localStorage.setItem("user", JSON.stringify(res.data.data));
@@ -41,6 +41,7 @@ export const AuthProvider = ({ children }) => {
       return true;
     } catch (err) {
       console.error(err);
+      alert(err.response?.data?.message || "Erreur lors de l'inscription");
       return false;
     }
   };
@@ -67,15 +68,11 @@ export const AuthProvider = ({ children }) => {
   };
 
   useEffect(() => {
-    if (localStorage.getItem("token")) {
-      fetchMe();
-    }
+    if (localStorage.getItem("token")) fetchMe();
   }, []);
 
   return (
-    <AuthContext.Provider
-      value={{ user, login, register, logout, updateUser }}
-    >
+    <AuthContext.Provider value={{ user, login, register, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );
