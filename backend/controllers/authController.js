@@ -1,177 +1,95 @@
 const User = require('../models/User');
-const { generateToken } = require('../middleware/auth');
+const jwt = require('jsonwebtoken');
 
-// @desc    Register new user
-// @route   POST /api/auth/register
-// @access  Public (pour l'instant)
+// Generate token
+const generateToken = (id) => {
+  return jwt.sign({ id }, process.env.JWT_SECRET, {
+    expiresIn: '30d',
+  });
+};
+
+// REGISTER — nouvel utilisateur = MEMBER par défaut
 exports.register = async (req, res) => {
   try {
-    const { firstName, lastName, email, password, role } = req.body;
+    const { firstName, lastName, email, password } = req.body;
 
-    if (!firstName || !lastName || !email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide all required fields',
-      });
-    }
+    if (!firstName || !lastName || !email || !password)
+      return res.status(400).json({ message: 'Tous les champs sont obligatoires' });
 
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({
-        success: false,
-        message: 'User with this email already exists',
-      });
-    }
-
-    // Rôle optionnel : si ce n'est pas "admin" ou "member", on force admin
-    const userRole =
-      role && ['admin', 'member'].includes(role) ? role : 'admin';
+    const exists = await User.findOne({ email });
+    if (exists) return res.status(400).json({ message: 'Email déjà utilisé' });
 
     const user = await User.create({
       firstName,
       lastName,
       email,
       password,
-      role: userRole,
+      role: 'member' // 🔥 inscription libre = simple membre
     });
-
-    const token = generateToken(user._id);
 
     res.status(201).json({
       success: true,
       data: {
-        user: {
-          id: user._id,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          email: user.email,
-          avatar: user.avatar,
-          role: user.role,
-          mustChangePassword: user.mustChangePassword,
-        },
-        token,
+        _id: user._id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        role: user.role
       },
+      token: generateToken(user._id)
     });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error creating user',
-      error: error.message,
-    });
+  } catch (err) {
+    res.status(500).json({ message: 'Erreur serveur' });
   }
 };
 
-// @desc    Login user
-// @route   POST /api/auth/login
-// @access  Public
+// LOGIN
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
-
-    if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide email and password',
-      });
-    }
-
     const user = await User.findOne({ email }).select('+password');
 
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials',
-      });
-    }
-
-    const isPasswordMatch = await user.comparePassword(password);
-
-    if (!isPasswordMatch) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials',
-      });
-    }
+    if (!user || !(await user.matchPassword(password)))
+      return res.status(400).json({ message: 'Identifiants invalides' });
 
     user.lastLogin = new Date();
     await user.save();
 
-    const token = generateToken(user._id);
-
-    res.status(200).json({
+    res.json({
       success: true,
       data: {
-        user: {
-          id: user._id,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          email: user.email,
-          avatar: user.avatar,
-          bio: user.bio,
-          phone: user.phone,
-          role: user.role,
-          mustChangePassword: user.mustChangePassword,
-        },
-        token,
+        _id: user._id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        role: user.role,
+        teams: user.teams,
       },
+      token: generateToken(user._id)
     });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error logging in',
-      error: error.message,
-    });
+  } catch (err) {
+    res.status(500).json({ message: 'Erreur serveur' });
   }
 };
 
-// @desc    Get current user
-// @route   GET /api/auth/me
-// @access  Private
+// GET ME
 exports.getMe = async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id).populate(
-      'teams',
-      'name color'
-    );
-
-    res.status(200).json({
-      success: true,
-      data: user,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error getting user',
-      error: error.message,
-    });
-  }
+  const user = await User.findById(req.user.id).populate('teams');
+  res.json({ success: true, data: user });
 };
 
-// @desc    Update user profile
-// @route   PUT /api/auth/profile
-// @access  Private
+// UPDATE PROFILE
 exports.updateProfile = async (req, res) => {
-  try {
-    const { firstName, lastName, bio, phone } = req.body;
+  const allowed = ['firstName', 'lastName', 'bio', 'phone'];
+  const updates = {};
 
-    const user = await User.findById(req.user.id);
+  Object.keys(req.body).forEach((key) => {
+    if (allowed.includes(key)) updates[key] = req.body[key];
+  });
 
-    if (firstName) user.firstName = firstName;
-    if (lastName) user.lastName = lastName;
-    if (bio !== undefined) user.bio = bio;
-    if (phone !== undefined) user.phone = phone;
+  const user = await User.findByIdAndUpdate(req.user.id, updates, {
+    new: true,
+  });
 
-    await user.save();
-
-    res.status(200).json({
-      success: true,
-      data: user,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error updating profile',
-      error: error.message,
-    });
-  }
+  res.json({ success: true, data: user });
 };
