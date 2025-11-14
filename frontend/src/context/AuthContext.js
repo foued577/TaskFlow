@@ -4,14 +4,24 @@ import { authAPI } from "../utils/api";
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(() =>
-    JSON.parse(localStorage.getItem("user")) || null
-  );
+  const [user, setUser] = useState(() => {
+    try {
+      const stored = localStorage.getItem("user");
+      if (!stored || stored === "undefined") return null;
+      return JSON.parse(stored);
+    } catch {
+      localStorage.removeItem("user");
+      return null;
+    }
+  });
 
   const login = (data) => {
     localStorage.setItem("token", data.token);
-    localStorage.setItem("user", JSON.stringify(data.data));
-    setUser(data.data);
+
+    // Toujours sauvegarder un JSON valide
+    localStorage.setItem("user", JSON.stringify(data.user || data.data));
+
+    setUser(data.user || data.data);
   };
 
   const logout = () => {
@@ -36,7 +46,16 @@ export const AuthProvider = ({ children }) => {
   };
 
   useEffect(() => {
-    if (localStorage.getItem("token")) fetchMe();
+    const token = localStorage.getItem("token");
+
+    // Si le user est corrompu → reset
+    const storedUser = localStorage.getItem("user");
+    if (storedUser === "undefined") {
+      localStorage.removeItem("user");
+      setUser(null);
+    }
+
+    if (token) fetchMe();
   }, []);
 
   return (
