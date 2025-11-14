@@ -16,7 +16,6 @@ import {
   X,
   Sun,
   Moon,
-  UserPlus,
 } from "lucide-react";
 import NotificationDropdown from "./NotificationDropdown";
 
@@ -26,8 +25,6 @@ const Layout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [theme, setTheme] = useState(localStorage.getItem("theme") || "light");
 
-  const isAdmin = user?.role === "admin";
-
   const navigation = [
     { name: "Tableau de bord", path: "/", icon: LayoutDashboard },
     { name: "Équipes", path: "/teams", icon: Users },
@@ -36,11 +33,6 @@ const Layout = () => {
     { name: "Kanban", path: "/kanban", icon: FolderKanban },
     { name: "Planning", path: "/calendar", icon: CalendarIcon },
     { name: "Exports Excel", path: "/export", icon: FileDown },
-
-    // 🔥 Ajout : création utilisateur (admin uniquement)
-    ...(isAdmin
-      ? [{ name: "Créer utilisateur", path: "/create-user", icon: UserPlus }]
-      : []),
   ];
 
   const isActive = (path) => location.pathname === path;
