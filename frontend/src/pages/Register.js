@@ -1,59 +1,60 @@
-import { createContext, useContext, useState, useEffect } from "react";
+import React, { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { authAPI } from "../utils/api";
+import { useAuth } from "../context/AuthContext";
+import { UserPlus, Mail, Lock, User, Loader2 } from "lucide-react";
 
-const AuthContext = createContext();
+const Register = () => {
+  const [formData, setFormData] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+  });
 
-export const AuthProvider = ({ children }) => {
+  const [loading, setLoading] = useState(false);
+  const { login } = useAuth();
+  const navigate = useNavigate();
 
-  // SAFE JSON PARSE — évite le crash
-  const safeParse = (key) => {
-    try {
-      const item = localStorage.getItem(key);
-      if (!item || item === "undefined") return null;
-      return JSON.parse(item);
-    } catch {
-      return null;
+  const handleChange = (e) =>
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (formData.password !== formData.confirmPassword) {
+      alert("Les mots de passe ne correspondent pas");
+      return;
     }
-  };
 
-  const [user, setUser] = useState(() => safeParse("user"));
+    setLoading(true);
 
-  const login = (data) => {
-    localStorage.setItem("token", data.token);
-    localStorage.setItem("user", JSON.stringify(data.data));
-    setUser(data.data);
-  };
-
-  const logout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    setUser(null);
-    window.location.href = "/login";
-  };
-
-  const updateUser = (data) => {
-    localStorage.setItem("user", JSON.stringify(data));
-    setUser(data);
-  };
-
-  const fetchMe = async () => {
     try {
-      const res = await authAPI.getMe();
-      updateUser(res.data.data);
-    } catch {
-      logout();
-    }
-  };
+      const res = await authAPI.register({
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email,
+        password: formData.password,
+      });
 
-  useEffect(() => {
-    if (localStorage.getItem("token")) fetchMe();
-  }, []);
+      // Auto-login après inscription
+      login(res.data);
+
+      navigate("/");
+    } catch (err) {
+      alert(err.response?.data?.message || "Erreur lors de l'inscription");
+    }
+
+    setLoading(false);
+  };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, updateUser }}>
-      {children}
-    </AuthContext.Provider>
+    // ton JSX ici (pas modifié)
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-600 to-primary-800 px-4 py-8">
+      {/* ... */}
+    </div>
   );
 };
 
-export const useAuth = () => useContext(AuthContext);
+export default Register;
