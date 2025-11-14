@@ -3,37 +3,38 @@ const { generateToken } = require('../middleware/auth');
 
 // @desc    Register new user
 // @route   POST /api/auth/register
-// @access  Public
+// @access  Public (pour l'instant)
 exports.register = async (req, res) => {
   try {
-    const { firstName, lastName, email, password } = req.body;
+    const { firstName, lastName, email, password, role } = req.body;
 
-    // Validate input
     if (!firstName || !lastName || !email || !password) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide all required fields'
+        message: 'Please provide all required fields',
       });
     }
 
-    // Check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({
         success: false,
-        message: 'User with this email already exists'
+        message: 'User with this email already exists',
       });
     }
 
-    // Create user
+    // Rôle optionnel : si ce n'est pas "admin" ou "member", on force admin
+    const userRole =
+      role && ['admin', 'member'].includes(role) ? role : 'admin';
+
     const user = await User.create({
       firstName,
       lastName,
       email,
-      password
+      password,
+      role: userRole,
     });
 
-    // Generate token
     const token = generateToken(user._id);
 
     res.status(201).json({
@@ -44,16 +45,18 @@ exports.register = async (req, res) => {
           firstName: user.firstName,
           lastName: user.lastName,
           email: user.email,
-          avatar: user.avatar
+          avatar: user.avatar,
+          role: user.role,
+          mustChangePassword: user.mustChangePassword,
         },
-        token
-      }
+        token,
+      },
     });
   } catch (error) {
     res.status(500).json({
       success: false,
       message: 'Error creating user',
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -65,39 +68,34 @@ exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Validate input
     if (!email || !password) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide email and password'
+        message: 'Please provide email and password',
       });
     }
 
-    // Get user with password
     const user = await User.findOne({ email }).select('+password');
 
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid credentials'
+        message: 'Invalid credentials',
       });
     }
 
-    // Check password
     const isPasswordMatch = await user.comparePassword(password);
 
     if (!isPasswordMatch) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid credentials'
+        message: 'Invalid credentials',
       });
     }
 
-    // Update last login
     user.lastLogin = new Date();
     await user.save();
 
-    // Generate token
     const token = generateToken(user._id);
 
     res.status(200).json({
@@ -110,16 +108,18 @@ exports.login = async (req, res) => {
           email: user.email,
           avatar: user.avatar,
           bio: user.bio,
-          phone: user.phone
+          phone: user.phone,
+          role: user.role,
+          mustChangePassword: user.mustChangePassword,
         },
-        token
-      }
+        token,
+      },
     });
   } catch (error) {
     res.status(500).json({
       success: false,
       message: 'Error logging in',
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -129,17 +129,20 @@ exports.login = async (req, res) => {
 // @access  Private
 exports.getMe = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).populate('teams', 'name color');
+    const user = await User.findById(req.user.id).populate(
+      'teams',
+      'name color'
+    );
 
     res.status(200).json({
       success: true,
-      data: user
+      data: user,
     });
   } catch (error) {
     res.status(500).json({
       success: false,
       message: 'Error getting user',
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -162,13 +165,13 @@ exports.updateProfile = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: user
+      data: user,
     });
   } catch (error) {
     res.status(500).json({
       success: false,
       message: 'Error updating profile',
-      error: error.message
+      error: error.message,
     });
   }
 };
