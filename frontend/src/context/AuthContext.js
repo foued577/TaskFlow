@@ -4,18 +4,19 @@ import { authAPI } from "../utils/api";
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
-  // Sécurise le JSON.parse pour éviter les crash
-  const safeUser = () => {
+
+  // SAFE JSON PARSE — évite le crash
+  const safeParse = (key) => {
     try {
-      const stored = localStorage.getItem("user");
-      if (!stored) return null;
-      return JSON.parse(stored);
+      const item = localStorage.getItem(key);
+      if (!item || item === "undefined") return null;
+      return JSON.parse(item);
     } catch {
       return null;
     }
   };
 
-  const [user, setUser] = useState(safeUser);
+  const [user, setUser] = useState(() => safeParse("user"));
 
   const login = (data) => {
     localStorage.setItem("token", data.token);
@@ -39,7 +40,7 @@ export const AuthProvider = ({ children }) => {
     try {
       const res = await authAPI.getMe();
       updateUser(res.data.data);
-    } catch (err) {
+    } catch {
       logout();
     }
   };
