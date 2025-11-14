@@ -1,95 +1,177 @@
 const User = require('../models/User');
-const jwt = require('jsonwebtoken');
+const { generateToken } = require('../middleware/auth');
 
-// Generate token
-const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: '30d',
-  });
-};
-
-// REGISTER — nouvel utilisateur = MEMBER par défaut
+// @desc    Register new user
+// @route   POST /api/auth/register
+// @access  Public (pour l'instant)
 exports.register = async (req, res) => {
   try {
-    const { firstName, lastName, email, password } = req.body;
+    const { firstName, lastName, email, password, role } = req.body;
 
-    if (!firstName || !lastName || !email || !password)
-      return res.status(400).json({ message: 'Tous les champs sont obligatoires' });
+    if (!firstName || !lastName || !email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide all required fields',
+      });
+    }
 
-    const exists = await User.findOne({ email });
-    if (exists) return res.status(400).json({ message: 'Email déjà utilisé' });
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: 'User with this email already exists',
+      });
+    }
+
+    // Rôle optionnel : si ce n'est pas "admin" ou "member", on force admin
+    const userRole =
+      role && ['admin', 'member'].includes(role) ? role : 'admin';
 
     const user = await User.create({
       firstName,
       lastName,
       email,
       password,
-      role: 'member' // 🔥 inscription libre = simple membre
+      role: userRole,
     });
+
+    const token = generateToken(user._id);
 
     res.status(201).json({
       success: true,
       data: {
-        _id: user._id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        role: user.role
+        user: {
+          id: user._id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          avatar: user.avatar,
+          role: user.role,
+          mustChangePassword: user.mustChangePassword,
+        },
+        token,
       },
-      token: generateToken(user._id)
     });
-  } catch (err) {
-    res.status(500).json({ message: 'Erreur serveur' });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error creating user',
+      error: error.message,
+    });
   }
 };
 
-// LOGIN
+// @desc    Login user
+// @route   POST /api/auth/login
+// @access  Public
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide email and password',
+      });
+    }
+
     const user = await User.findOne({ email }).select('+password');
 
-    if (!user || !(await user.matchPassword(password)))
-      return res.status(400).json({ message: 'Identifiants invalides' });
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid credentials',
+      });
+    }
+
+    const isPasswordMatch = await user.comparePassword(password);
+
+    if (!isPasswordMatch) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid credentials',
+      });
+    }
 
     user.lastLogin = new Date();
     await user.save();
 
-    res.json({
+    const token = generateToken(user._id);
+
+    res.status(200).json({
       success: true,
       data: {
-        _id: user._id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        role: user.role,
-        teams: user.teams,
+        user: {
+          id: user._id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          avatar: user.avatar,
+          bio: user.bio,
+          phone: user.phone,
+          role: user.role,
+          mustChangePassword: user.mustChangePassword,
+        },
+        token,
       },
-      token: generateToken(user._id)
     });
-  } catch (err) {
-    res.status(500).json({ message: 'Erreur serveur' });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error logging in',
+      error: error.message,
+    });
   }
 };
 
-// GET ME
+// @desc    Get current user
+// @route   GET /api/auth/me
+// @access  Private
 exports.getMe = async (req, res) => {
-  const user = await User.findById(req.user.id).populate('teams');
-  res.json({ success: true, data: user });
+  try {
+    const user = await User.findById(req.user.id).populate(
+      'teams',
+      'name color'
+    );
+
+    res.status(200).json({
+      success: true,
+      data: user,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error getting user',
+      error: error.message,
+    });
+  }
 };
 
-// UPDATE PROFILE
+// @desc    Update user profile
+// @route   PUT /api/auth/profile
+// @access  Private
 exports.updateProfile = async (req, res) => {
-  const allowed = ['firstName', 'lastName', 'bio', 'phone'];
-  const updates = {};
+  try {
+    const { firstName, lastName, bio, phone } = req.body;
 
-  Object.keys(req.body).forEach((key) => {
-    if (allowed.includes(key)) updates[key] = req.body[key];
-  });
+    const user = await User.findById(req.user.id);
 
-  const user = await User.findByIdAndUpdate(req.user.id, updates, {
-    new: true,
-  });
+    if (firstName) user.firstName = firstName;
+    if (lastName) user.lastName = lastName;
+    if (bio !== undefined) user.bio = bio;
+    if (phone !== undefined) user.phone = phone;
 
-  res.json({ success: true, data: user });
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      data: user,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error updating profile',
+      error: error.message,
+    });
+  }
 };
