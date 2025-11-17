@@ -1,43 +1,41 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
-import { authAPI } from '../utils/api';
-import { toast } from 'react-toastify';
+import { createContext, useContext, useState, useEffect } from "react";
+import { authAPI } from "../utils/api";
 const AuthContext = createContext();
-export const useAuth = () => useContext(AuthContext);
 export const AuthProvider = ({ children }) => {
  const [user, setUser] = useState(
-   () => JSON.parse(localStorage.getItem('user')) || null
+   JSON.parse(localStorage.getItem("user")) || null
  );
- const [loading, setLoading] = useState(true);
+ // LOGIN
  const login = async (email, password) => {
    try {
      const res = await authAPI.login({ email, password });
-     const { token, data } = res.data;
-     localStorage.setItem('token', token);
-     localStorage.setItem('user', JSON.stringify(data));
-     setUser(data);
+     localStorage.setItem("token", res.data.token);
+     localStorage.setItem("user", JSON.stringify(res.data.data));
+     setUser(res.data.data);
      return true;
    } catch (err) {
-     toast.error(err.response?.data?.message || "Erreur de connexion");
+     console.error("LOGIN ERROR:", err);
      return false;
    }
  };
+ // REGISTER
  const register = async (data) => {
    try {
      const res = await authAPI.register(data);
-     const { token, data: user } = res.data;
-     localStorage.setItem('token', token);
-     localStorage.setItem('user', JSON.stringify(user));
-     setUser(user);
+     localStorage.setItem("token", res.data.token);
+     localStorage.setItem("user", JSON.stringify(res.data.data));
+     setUser(res.data.data);
      return true;
    } catch (err) {
-     toast.error(err.response?.data?.message || "Erreur d'inscription");
+     console.error("REGISTER ERROR:", err);
      return false;
    }
  };
  const logout = () => {
-   localStorage.removeItem('token');
-   localStorage.removeItem('user');
+   localStorage.removeItem("token");
+   localStorage.removeItem("user");
    setUser(null);
+   window.location.href = "/login";
  };
  const fetchMe = async () => {
    try {
@@ -45,18 +43,15 @@ export const AuthProvider = ({ children }) => {
      setUser(res.data.data);
    } catch {
      logout();
-   } finally {
-     setLoading(false);
    }
  };
  useEffect(() => {
-   const token = localStorage.getItem("token");
-   if (token) fetchMe();
-   else setLoading(false);
+   if (localStorage.getItem("token")) fetchMe();
  }, []);
  return (
 <AuthContext.Provider value={{ user, login, register, logout }}>
-     {!loading && children}
+     {children}
 </AuthContext.Provider>
  );
 };
+export const useAuth = () => useContext(AuthContext);
