@@ -1,11 +1,10 @@
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useState } from "react";
 import { authAPI } from "../utils/api";
 const AuthContext = createContext();
 export const AuthProvider = ({ children }) => {
  const [user, setUser] = useState(
    JSON.parse(localStorage.getItem("user")) || null
  );
- // LOGIN
  const login = async (email, password) => {
    try {
      const res = await authAPI.login({ email, password });
@@ -14,11 +13,10 @@ export const AuthProvider = ({ children }) => {
      setUser(res.data.data);
      return true;
    } catch (err) {
-     console.error("LOGIN ERROR:", err);
+     alert("Identifiants invalides");
      return false;
    }
  };
- // REGISTER
  const register = async (data) => {
    try {
      const res = await authAPI.register(data);
@@ -27,7 +25,7 @@ export const AuthProvider = ({ children }) => {
      setUser(res.data.data);
      return true;
    } catch (err) {
-     console.error("REGISTER ERROR:", err);
+     alert("Erreur lors de l'inscription");
      return false;
    }
  };
@@ -37,17 +35,6 @@ export const AuthProvider = ({ children }) => {
    setUser(null);
    window.location.href = "/login";
  };
- const fetchMe = async () => {
-   try {
-     const res = await authAPI.getMe();
-     setUser(res.data.data);
-   } catch {
-     logout();
-   }
- };
- useEffect(() => {
-   if (localStorage.getItem("token")) fetchMe();
- }, []);
  return (
 <AuthContext.Provider value={{ user, login, register, logout }}>
      {children}
