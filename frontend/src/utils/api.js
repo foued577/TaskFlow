@@ -1,135 +1,136 @@
-import axios from "axios";
+import axios from 'axios';
 
-const API = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || "https://taskflow-8g7v.onrender.com/api",
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+
+const api = axios.create({
+  baseURL: API_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  timeout: 15000, // 15 second timeout
 });
 
-// 🔐 Ajouter le token automatiquement
-API.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
-
-// Intercepteur de réponse pour gérer les erreurs
-API.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response) {
-      console.error("Erreur API:", {
-        status: error.response.status,
-        data: error.response.data,
-        url: error.config?.url
-      });
-      
-      // Si erreur 401, rediriger vers login
-      if (error.response.status === 401) {
-        localStorage.removeItem("token");
-        if (window.location.pathname !== "/login") {
-          window.location.href = "/login";
-        }
-      }
-    } else if (error.request) {
-      console.error("Pas de réponse du serveur:", error.request);
-    } else {
-      console.error("Erreur de configuration:", error.message);
+// Add token to requests
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
+    return config;
+  },
+  (error) => {
     return Promise.reject(error);
   }
 );
 
-/* ----------------------------------------------------
-   🔹 AUTH
------------------------------------------------------*/
+// Handle response errors with retry logic
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+
+    // If 401, logout
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
+      return Promise.reject(error);
+    }
+
+    // If 503 (Service Unavailable - DB reconnecting), retry after delay
+    if (error.response?.status === 503 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      const retryAfter = error.response.data?.retryAfter || 3;
+      
+      console.log(`⚠️ Service unavailable, retrying in ${retryAfter}s...`);
+      
+      // Wait and retry
+      await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+      return api(originalRequest);
+    }
+
+    // If network error or timeout, retry once after 2s
+    if ((error.code === 'ECONNABORTED' || error.message === 'Network Error') && !originalRequest._retryNetwork) {
+      originalRequest._retryNetwork = true;
+      console.log('⚠️ Network error, retrying in 2s...');
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      return api(originalRequest);
+    }
+
+    return Promise.reject(error);
+  }
+);
+
+export default api;
+
+// Auth API
 export const authAPI = {
-  login: (data) => API.post("/auth/login", data),
-  register: (data) => API.post("/auth/register", data),
-  getMe: () => API.get("/auth/me"),
-  updateProfile: (data) => API.put("/auth/update-profile", data),
+  register: (data) => api.post('/auth/register', data),
+  login: (data) => api.post('/auth/login', data),
+  getMe: () => api.get('/auth/me'),
+  updateProfile: (data) => api.put('/auth/profile', data),
 };
 
-/* ----------------------------------------------------
-   🔹 USERS (Admin seulement)
------------------------------------------------------*/
+// Users API
 export const usersAPI = {
-  getAll: () => API.get("/users"),
-  getOne: (id) => API.get(`/users/${id}`),
-  create: (data) => API.post("/users", data),
-  update: (id, data) => API.put(`/users/${id}`, data),
-  delete: (id) => API.delete(`/users/${id}`),
-  search: (query) => API.get(`/users?search=${query}`),
+  search: (query, teamId) => api.get('/users/search', { params: { q: query, teamId } }),
+  getUser: (id) => api.get(`/users/${id}`),
 };
 
-/* ----------------------------------------------------
-   🔹 TEAMS
------------------------------------------------------*/
+// Teams API
 export const teamsAPI = {
-  getAll: () => API.get("/teams"),
-  getOne: (id) => API.get(`/teams/${id}`),
-  create: (data) => API.post("/teams", data),
-  update: (id, data) => API.put(`/teams/${id}`, data),
-  addMember: (teamId, userId) =>
-    API.post(`/teams/${teamId}/members`, { userId }),
-  removeMember: (teamId, userId) =>
-    API.delete(`/teams/${teamId}/members/${userId}`),
+  getAll: () => api.get('/teams'),
+  getOne: (id) => api.get(`/teams/${id}`),
+  create: (data) => api.post('/teams', data),
+  update: (id, data) => api.put(`/teams/${id}`, data),
+  addMember: (id, userId) => api.post(`/teams/${id}/members`, { userId }),
+  removeMember: (id, userId) => api.delete(`/teams/${id}/members/${userId}`),
 };
 
-/* ----------------------------------------------------
-   🔹 PROJECTS
------------------------------------------------------*/
+// Projects API
 export const projectsAPI = {
-  getAll: () => API.get("/projects"),
-  getOne: (id) => API.get(`/projects/${id}`),
-  create: (data) => API.post("/projects", data),
-  update: (id, data) => API.put(`/projects/${id}`, data),
-  delete: (id) => API.delete(`/projects/${id}`),
+  getAll: (params) => api.get('/projects', { params }),
+  getOne: (id) => api.get(`/projects/${id}`),
+  create: (data) => api.post('/projects', data),
+  update: (id, data) => api.put(`/projects/${id}`, data),
+  delete: (id) => api.delete(`/projects/${id}`),
 };
 
-/* ----------------------------------------------------
-   🔹 TASKS
------------------------------------------------------*/
+// Tasks API
 export const tasksAPI = {
-  getAll: () => API.get("/tasks"),
-  getOne: (id) => API.get(`/tasks/${id}`),
-  create: (data) => API.post("/tasks", data),
-  update: (id, data) => API.put(`/tasks/${id}`, data),
-  delete: (id) => API.delete(`/tasks/${id}`),
-  addSubtask: (id, data) => API.post(`/tasks/${id}/subtasks`, data),
-  toggleSubtask: (id, subId) =>
-    API.put(`/tasks/${id}/subtasks/${subId}`),
-  uploadAttachment: (id, file) =>
-    API.post(`/tasks/${id}/attachments`, file, {
-      headers: { "Content-Type": "multipart/form-data" },
-    }),
-  getOverdue: () => API.get("/tasks/overdue"),
+  getAll: (params) => api.get('/tasks', { params }),
+  getOne: (id) => api.get(`/tasks/${id}`),
+  create: (data) => api.post('/tasks', data),
+  update: (id, data) => api.put(`/tasks/${id}`, data),
+  delete: (id) => api.delete(`/tasks/${id}`),
+  addSubtask: (id, title) => api.post(`/tasks/${id}/subtasks`, { title }),
+  toggleSubtask: (id, subtaskId) => api.put(`/tasks/${id}/subtasks/${subtaskId}`),
+  uploadAttachment: (id, formData) => api.post(`/tasks/${id}/attachments`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
+  getOverdue: () => api.get('/tasks/overdue'),
 };
 
-/* ----------------------------------------------------
-   🔹 NOTIFICATIONS
------------------------------------------------------*/
-export const notificationsAPI = {
-  getAll: () => API.get("/notifications"),
-  markAsRead: (id) => API.put(`/notifications/${id}/read`),
-  markAllAsRead: () => API.put("/notifications/read-all"),
-  delete: (id) => API.delete(`/notifications/${id}`),
-};
-
-/* ----------------------------------------------------
-   🔹 COMMENTS
------------------------------------------------------*/
+// Comments API
 export const commentsAPI = {
-  getTaskComments: (taskId) => API.get(`/comments/${taskId}`),
-  addComment: (taskId, data) => API.post("/comments", { taskId, ...data }),
-  updateComment: (id, data) => API.put(`/comments/${id}`, data),
-  deleteComment: (id) => API.delete(`/comments/${id}`),
+  getForTask: (taskId) => api.get(`/comments/task/${taskId}`),
+  create: (data) => api.post('/comments', data),
+  update: (id, content) => api.put(`/comments/${id}`, { content }),
+  delete: (id) => api.delete(`/comments/${id}`),
 };
 
-/* ----------------------------------------------------
-   🔹 HISTORY
------------------------------------------------------*/
+// Notifications API
+export const notificationsAPI = {
+  getAll: (params) => api.get('/notifications', { params }),
+  markAsRead: (id) => api.put(`/notifications/${id}/read`),
+  markAllAsRead: () => api.put('/notifications/read-all'),
+  delete: (id) => api.delete(`/notifications/${id}`),
+};
+
+// History API
 export const historyAPI = {
-  getAll: () => API.get("/history/user"),
-  getProjectHistory: (projectId) => API.get(`/history/project/${projectId}`),
-  getEntityHistory: (entityType, entityId) => 
-    API.get(`/history/${entityType}/${entityId}`),
+  getProjectHistory: (projectId, limit) => api.get(`/history/project/${projectId}`, { params: { limit } }),
+  getUserHistory: (limit) => api.get('/history/user', { params: { limit } }),
+  getEntityHistory: (entityType, entityId, limit) => api.get(`/history/${entityType}/${entityId}`, { params: { limit } }),
 };
