@@ -1,79 +1,109 @@
 import axios from "axios";
 
-const API_URL =
-  process.env.REACT_APP_API_URL ||
-  "https://taskflow-backend.onrender.com/api";
-
-// Axios instance with token
-export const api = axios.create({
-  baseURL: API_URL,
+const API = axios.create({
+  baseURL: process.env.REACT_APP_API_URL || "https://taskflow-8g7v.onrender.com/api",
 });
 
-// Automatically attach token
-api.interceptors.request.use((config) => {
+// 🔐 Ajouter le token automatiquement
+API.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
-// -------- AUTH ----------
+/* ----------------------------------------------------
+   🔹 AUTH
+-----------------------------------------------------*/
 export const authAPI = {
-  login: (data) => api.post("/auth/login", data),
-  register: (data) => api.post("/auth/register", data),
-  getMe: () => api.get("/auth/me"),
+  login: (data) => API.post("/auth/login", data),
+  register: (data) => API.post("/auth/register", data),
+  getMe: () => API.get("/auth/me"),
 };
 
-// -------- USERS ----------
+/* ----------------------------------------------------
+   🔹 USERS (Admin seulement)
+-----------------------------------------------------*/
 export const usersAPI = {
-  getAll: () => api.get("/users"),
-  getOne: (id) => api.get(`/users/${id}`),
-  create: (data) => api.post("/users", data),
-  update: (id, data) => api.put(`/users/${id}`, data),
-  delete: (id) => api.delete(`/users/${id}`),
+  getAll: () => API.get("/users"),
+  getOne: (id) => API.get(`/users/${id}`),
+  create: (data) => API.post("/users", data),
+  update: (id, data) => API.put(`/users/${id}`, data),
+  delete: (id) => API.delete(`/users/${id}`),
+  search: (query) => API.get(`/users?search=${query}`),
 };
 
-// -------- TEAMS ----------
+/* ----------------------------------------------------
+   🔹 TEAMS
+-----------------------------------------------------*/
 export const teamsAPI = {
-  getAll: () => api.get("/teams"),
-  getOne: (id) => api.get(`/teams/${id}`),
-  create: (data) => api.post("/teams", data),
-  update: (id, data) => api.put(`/teams/${id}`, data),
-  addMember: (teamId, data) => api.post(`/teams/${teamId}/members`, data),
+  getAll: () => API.get("/teams"),
+  getOne: (id) => API.get(`/teams/${id}`),
+  create: (data) => API.post("/teams", data),
+  update: (id, data) => API.put(`/teams/${id}`, data),
+
+  addMember: (teamId, userId) =>
+    API.post(`/teams/${teamId}/members`, { userId }),
+
   removeMember: (teamId, userId) =>
-    api.delete(`/teams/${teamId}/members/${userId}`),
+    API.delete(`/teams/${teamId}/members/${userId}`),
 };
 
-// -------- PROJECTS ----------
+/* ----------------------------------------------------
+   🔹 PROJECTS
+-----------------------------------------------------*/
 export const projectsAPI = {
-  getAll: () => api.get("/projects"),
-  getOne: (id) => api.get(`/projects/${id}`),
-  create: (data) => api.post("/projects", data),
-  update: (id, data) => api.put(`/projects/${id}`, data),
-  delete: (id) => api.delete(`/projects/${id}`),
+  getAll: () => API.get("/projects"),
+  getOne: (id) => API.get(`/projects/${id}`),
+  create: (data) => API.post("/projects", data),
+  update: (id, data) => API.put(`/projects/${id}`, data),
+  delete: (id) => API.delete(`/projects/${id}`),
 };
 
-// -------- TASKS ----------
+/* ----------------------------------------------------
+   🔹 TASKS
+-----------------------------------------------------*/
 export const tasksAPI = {
-  getAll: (params) => api.get("/tasks", { params }),
-  getOne: (id) => api.get(`/tasks/${id}`),
-  create: (data) => api.post("/tasks", data),
-  update: (id, data) => api.put(`/tasks/${id}`, data),
-  delete: (id) => api.delete(`/tasks/${id}`),
-  getOverdue: () => api.get("/tasks/overdue"),
+  getAll: () => API.get("/tasks"),
+  getOne: (id) => API.get(`/tasks/${id}`),
+  create: (data) => API.post("/tasks", data),
+  update: (id, data) => API.put(`/tasks/${id}`, data),
+  delete: (id) => API.delete(`/tasks/${id}`),
+
+  addSubtask: (id, data) => API.post(`/tasks/${id}/subtasks`, data),
+  toggleSubtask: (id, subId) =>
+    API.put(`/tasks/${id}/subtasks/${subId}`),
+
+  uploadAttachment: (id, file) =>
+    API.post(`/tasks/${id}/attachments`, file, {
+      headers: { "Content-Type": "multipart/form-data" },
+    }),
+
+  getOverdue: () => API.get("/tasks/overdue"),
 };
 
-// -------- COMMENTS (MANQUAIT !) ----------
-export const commentsAPI = {
-  create: (taskId, data) => api.post(`/tasks/${taskId}/comments`, data),
-  getAll: (taskId) => api.get(`/tasks/${taskId}/comments`),
-  delete: (taskId, commentId) =>
-    api.delete(`/tasks/${taskId}/comments/${commentId}`),
-};
-
-// -------- NOTIFICATIONS ----------
+/* ----------------------------------------------------
+   🔹 NOTIFICATIONS (déjà corrigé)
+-----------------------------------------------------*/
 export const notificationsAPI = {
-  getAll: (params) => api.get("/notifications", { params }),
-  markAsRead: (id) => api.put(`/notifications/${id}/read`),
-  markAllAsRead: () => api.put("/notifications/read-all"),
-  delete: (id) => api.delete(`/notifications/${id}`),
+  getAll: () => API.get("/notifications"),
+  markAsRead: (id) => API.put(`/notifications/${id}/read`),
+  markAllAsRead: () => API.put("/notifications/read-all"),
+  delete: (id) => API.delete(`/notifications/${id}`),
+};
+
+/* ----------------------------------------------------
+   🔹 COMMENTS (manquait → causait erreur)
+-----------------------------------------------------*/
+export const commentsAPI = {
+  getTaskComments: (taskId) => API.get(`/comments/${taskId}`),
+  addComment: (taskId, data) => API.post(`/comments/${taskId}`, data),
+  deleteComment: (taskId, commentId) =>
+    API.delete(`/comments/${taskId}/${commentId}`),
+};
+
+/* ----------------------------------------------------
+   🔹 HISTORY (manquait → causait erreur)
+-----------------------------------------------------*/
+export const historyAPI = {
+  getAll: () => API.get("/history"),
 };
