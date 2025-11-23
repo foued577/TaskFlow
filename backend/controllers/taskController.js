@@ -1,339 +1,302 @@
-const Task = require("../models/Task");
-const Project = require("../models/Project");
-const Team = require("../models/Team");
-const path = require("path");
-const fs = require("fs");
+const Task = require('../models/Task');
+const Project = require('../models/Project');
+const Team = require('../models/Team');
+const History = require('../models/History');
+const Notification = require('../models/Notification');
+const mongoose = require('mongoose');
 
-// -----------------------------------------------------
-// GET /api/tasks — Admin = toutes les tâches
-// Membre = uniquement tâches de ses équipes
-// -----------------------------------------------------
-exports.getTasks = async (req, res) => {
+// @desc Create new task
+// @route POST /api/tasks
+// @access Private
+exports.createTask = async (req, res) => {
   try {
-    let tasks;
+    const { title, description, projectId, assignedTo, priority, estimatedHours, startDate, dueDate, tags, parentTask } = req.body;
 
-    if (req.user.role === "admin") {
-      tasks = await Task.find()
-        .populate("project", "name color team teams")
-        .populate("assignedTo", "firstName lastName email");
-    } else {
-      const teams = await Team.find({ "members.user": req.user.id }).select("_id");
-      const teamIds = teams.map(t => t._id);
-
-      // Gérer les projets avec team (ancien) ou teams (nouveau)
-      const projects = await Project.find({
-        $or: [
-          { team: { $in: teamIds } },
-          { teams: { $in: teamIds } }
-        ]
-      }).select("_id");
-
-      const projectIds = projects.map(p => p._id);
-
-      tasks = await Task.find({ project: { $in: projectIds } })
-        .populate("project", "name color team teams")
-        .populate("assignedTo", "firstName lastName email");
+    if (!title || !projectId) {
+      return res.status(400).json({ success: false, message: 'Task title and project are required' });
     }
 
-    // S'assurer que assignedTo est toujours un tableau
-    const safeTasks = tasks.map(task => {
-      const taskObj = task.toObject();
-      return {
-        ...taskObj,
-        assignedTo: taskObj.assignedTo || [],
-        subtasks: taskObj.subtasks || []
-      };
+    const project = await Project.findById(projectId).populate('team');
+    if (!project) return res.status(404).json({ success: false, message: 'Project not found' });
+
+    const team = await Team.findById(project.team);
+    const isMember = team.members.some(m => m.user.toString() === req.user.id);
+    if (!isMember) return res.status(403).json({ success: false, message: 'Not authorized' });
+
+    const task = await Task.create({
+      title,
+      description,
+      project: projectId,
+      assignedTo: assignedTo || [],
+      priority: priority || 'medium',
+      estimatedHours: estimatedHours || 0,
+      startDate,
+      dueDate,
+      tags: tags || [],
+      parentTask: parentTask || null,
+      createdBy: req.user.id
     });
 
-    res.status(200).json({ success: true, data: safeTasks });
-  } catch (error) {
-    console.error("Erreur lors du chargement des tâches:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Erreur serveur",
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    await History.create({
+      user: req.user.id,
+      action: 'created',
+      entityType: 'task',
+      entityId: task._id,
+      entityName: title,
+      project: projectId
     });
+
+    if (assignedTo && assignedTo.length > 0) {
+      for (const userId of assignedTo) {
+        if (userId !== req.user.id) {
+          await Notification.create({
+            recipient: userId,
+            sender: req.user.id,
+            type: 'task_assigned',
+            title: 'New task assigned',
+            message: `${req.user.firstName} assigned you to task "${title}"`,
+            relatedTask: task._id,
+            relatedProject: projectId
+          });
+        }
+      }
+    }
+
+    const populatedTask = await Task.findById(task._id)
+      .populate('assignedTo', 'firstName lastName email avatar')
+      .populate('createdBy', 'firstName lastName')
+      .populate('project', 'name color');
+
+    res.status(201).json({ success: true, data: populatedTask });
+
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error creating task', error: error.message });
   }
 };
 
-// -----------------------------------------------------
-// GET /api/tasks/overdue - Tâches en retard
-// -----------------------------------------------------
-exports.getOverdueTasks = async (req, res) => {
+// ✅ FIXED & STABLE GET TASKS FUNCTION
+exports.getTasks = async (req, res) => {
   try {
-    const now = new Date();
+    const { projectId, status, priority, filterType, assignedUser } = req.query;
 
-    const tasks = await Task.find({
-      dueDate: { $lt: now },
-      status: { $ne: "completed" }
-    })
-      .populate("project", "name color team teams")
-      .populate("assignedTo", "firstName lastName email");
+    console.log('🔍 getTasks called with:', { projectId, status, priority, filterType, assignedUser });
+    console.log('👤 User ID:', req.user.id);
 
-    // S'assurer que assignedTo est toujours un tableau
-    const safeTasks = tasks.map(task => {
-      const taskObj = task.toObject();
-      return {
-        ...taskObj,
-        assignedTo: taskObj.assignedTo || []
-      };
-    });
+    // Convertir l'ID utilisateur en ObjectId
+    const userId = new mongoose.Types.ObjectId(req.user.id);
 
-    res.status(200).json({ 
-      success: true, 
-      count: safeTasks.length,
-      data: safeTasks 
-    });
+    const teams = await Team.find({ 'members.user': userId });
+    const projects = await Project.find({ team: { $in: teams.map(t => t._id) } });
+
+    console.log('👥 Teams found:', teams.length);
+    console.log('📁 Projects found:', projects.length);
+
+    let query = {
+      project: projectId || { $in: projects.map(p => p._id) },
+      parentTask: null
+    };
+
+    if (status) query.status = status;
+    if (priority) query.priority = priority;
+
+    // ✅ Tâches où JE suis assigné
+    if (filterType === "assignedToMe") {
+      query.assignedTo = { $in: [userId] };
+      console.log('🎯 Filter: assignedToMe with userId:', userId);
+    }
+
+    // ✅ Tâches créées par moi
+    if (filterType === "createdByMe") {
+      query.createdBy = userId;
+    }
+
+    // ✅ Tâches créées par moi mais NON assignées (du tout)
+    if (filterType === "createdByMeNotAssignedToMe") {
+      query.createdBy = userId;
+      // Cherche les tâches sans assigné OU sans moi dans les assignés
+      query.$or = [
+        { assignedTo: { $exists: false } },
+        { assignedTo: { $size: 0 } },
+        { assignedTo: { $nin: [userId] } }
+      ];
+      console.log('🎯 Filter: createdByMeNotAssignedToMe');
+    }
+
+    // ✅ Filtre direct sur un utilisateur assigné précis
+    if (assignedUser) query.assignedTo = { $in: [new mongoose.Types.ObjectId(assignedUser)] };
+
+    console.log('🔎 Final query:', JSON.stringify(query, null, 2));
+
+    const tasks = await Task.find(query)
+      .populate('assignedTo', 'firstName lastName email avatar')
+      .populate('createdBy', 'firstName lastName')
+      .populate('project', 'name color team')
+      .sort('-createdAt');
+
+    console.log('✅ Tasks found:', tasks.length);
+    
+    // Debug: afficher les premières tâches si elles existent
+    if (tasks.length > 0) {
+      console.log('📝 Sample task:', {
+        title: tasks[0].title,
+        assignedTo: tasks[0].assignedTo?.map(u => u._id),
+        createdBy: tasks[0].createdBy?._id
+      });
+    }
+
+    res.status(200).json({ success: true, count: tasks.length, data: tasks });
+
   } catch (error) {
-    console.error("Erreur lors du chargement des tâches en retard:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Erreur serveur",
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
+    console.error('❌ Error in getTasks:', error);
+    res.status(500).json({ success: false, message: 'Error fetching tasks', error: error.message });
   }
 };
 
-// -----------------------------------------------------
-// GET /api/tasks/:id
-// -----------------------------------------------------
+// @desc Get single task
+// @route GET /api/tasks/:id
+// @access Private
 exports.getTask = async (req, res) => {
   try {
     const task = await Task.findById(req.params.id)
-      .populate("project", "name color team teams")
-      .populate("assignedTo", "firstName lastName email");
+      .populate('assignedTo', 'firstName lastName email avatar')
+      .populate('createdBy', 'firstName lastName')
+      .populate('project')
+      .populate('parentTask', 'title')
+      .populate('subtasks.completedBy', 'firstName lastName')
+      .populate('attachments.uploadedBy', 'firstName lastName');
 
-    if (!task)
-      return res.status(404).json({ success: false, message: "Tâche introuvable" });
+    if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
 
-    if (req.user.role !== "admin") {
-      const project = await Project.findById(task.project);
-      if (!project) {
-        return res.status(403).json({ success: false, message: "Accès refusé" });
-      }
+    res.status(200).json({ success: true, data: task });
 
-      // Gérer team (ancien) ou teams (nouveau)
-      const projectTeam = project.team || (project.teams && project.teams[0]);
-      if (!projectTeam) {
-        return res.status(403).json({ success: false, message: "Accès refusé" });
-      }
-
-      const teamId = projectTeam._id || projectTeam;
-      const team = await Team.findById(teamId);
-      if (!team || !team.members) {
-        return res.status(403).json({ success: false, message: "Accès refusé" });
-      }
-
-      const isMember = team.members.some(m => 
-        m.user && m.user.toString() === req.user.id
-      );
-
-      if (!isMember)
-        return res.status(403).json({ success: false, message: "Accès refusé" });
-    }
-
-    const taskObj = task.toObject();
-    res.status(200).json({ 
-      success: true, 
-      data: {
-        ...taskObj,
-        assignedTo: taskObj.assignedTo || [],
-        subtasks: taskObj.subtasks || []
-      }
-    });
   } catch (error) {
-    console.error("Erreur lors de la récupération de la tâche:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Erreur serveur",
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
+    res.status(500).json({ success: false, message: 'Error fetching task', error: error.message });
   }
 };
 
-// -----------------------------------------------------
-// POST /api/tasks — Admin seulement
-// -----------------------------------------------------
-exports.createTask = async (req, res) => {
-  try {
-    if (req.user.role !== "admin") {
-      return res.status(403).json({
-        success: false,
-        message: "Seul un administrateur peut créer une tâche",
-      });
-    }
-
-    // S'assurer que assignedTo est un tableau
-    const assignedTo = Array.isArray(req.body.assignedTo) 
-      ? req.body.assignedTo 
-      : (req.body.assignedTo ? [req.body.assignedTo] : []);
-
-    const task = await Task.create({
-      title: req.body.title,
-      description: req.body.description || '',
-      status: req.body.status || 'not_started',
-      priority: req.body.priority || 'medium',
-      project: req.body.project,
-      assignedTo: assignedTo,
-      dueDate: req.body.dueDate || null,
-      startDate: req.body.startDate || null,
-      createdBy: req.user.id,
-    });
-
-    res.status(201).json({ success: true, data: task });
-  } catch (error) {
-    console.error("Erreur lors de la création de la tâche:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Erreur serveur",
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-};
-
-// -----------------------------------------------------
-// PUT /api/tasks/:id
-// -----------------------------------------------------
+// @desc Update task
+// @route PUT /api/tasks/:id
+// @access Private
 exports.updateTask = async (req, res) => {
   try {
-    let task = await Task.findById(req.params.id);
-
-    if (!task)
-      return res.status(404).json({ success: false, message: "Tâche introuvable" });
-
-    if (req.user.role !== "admin") {
-      const project = await Project.findById(task.project);
-      if (!project) {
-        return res.status(403).json({ success: false, message: "Accès refusé" });
-      }
-
-      // Gérer team (ancien) ou teams (nouveau)
-      const projectTeam = project.team || (project.teams && project.teams[0]);
-      if (!projectTeam) {
-        return res.status(403).json({ success: false, message: "Accès refusé" });
-      }
-
-      const teamId = projectTeam._id || projectTeam;
-      const team = await Team.findById(teamId);
-      if (!team || !team.members) {
-        return res.status(403).json({ success: false, message: "Accès refusé" });
-      }
-
-      const isMember = team.members.some(m => 
-        m.user && m.user.toString() === req.user.id
-      );
-
-      if (!isMember)
-        return res.status(403).json({ success: false, message: "Accès refusé" });
-    }
-
-    // S'assurer que assignedTo est un tableau
-    const assignedTo = req.body.assignedTo !== undefined
-      ? (Array.isArray(req.body.assignedTo) 
-          ? req.body.assignedTo 
-          : (req.body.assignedTo ? [req.body.assignedTo] : []))
-      : undefined;
-
-    const updateData = {};
-    if (req.body.title !== undefined) updateData.title = req.body.title;
-    if (req.body.description !== undefined) updateData.description = req.body.description;
-    if (req.body.status !== undefined) updateData.status = req.body.status;
-    if (req.body.priority !== undefined) updateData.priority = req.body.priority;
-    if (assignedTo !== undefined) updateData.assignedTo = assignedTo;
-    if (req.body.dueDate !== undefined) updateData.dueDate = req.body.dueDate || null;
-    if (req.body.startDate !== undefined) updateData.startDate = req.body.startDate || null;
-
-    // Si la tâche est complétée, ajouter la date de complétion
-    if (req.body.status === 'completed' && task.status !== 'completed') {
-      updateData.completedAt = new Date();
-    } else if (req.body.status !== 'completed' && task.status === 'completed') {
-      updateData.completedAt = null;
-    }
-
-    const updated = await Task.findByIdAndUpdate(
-      req.params.id,
-      updateData,
-      { new: true }
-    );
-
-    res.status(200).json({ success: true, data: updated });
-  } catch (error) {
-    console.error("Erreur lors de la mise à jour de la tâche:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Erreur serveur",
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-};
-
-// -----------------------------------------------------
-// DELETE /api/tasks/:id — Admin
-// -----------------------------------------------------
-exports.deleteTask = async (req, res) => {
-  try {
-    if (req.user.role !== "admin") {
-      return res.status(403).json({
-        success: false,
-        message: "Seul un administrateur peut supprimer une tâche",
-      });
-    }
-
-    const deleted = await Task.findByIdAndDelete(req.params.id);
-
-    if (!deleted)
-      return res.status(404).json({ success: false, message: "Tâche introuvable" });
-
-    res.status(200).json({ success: true, message: "Tâche supprimée" });
-  } catch (error) {
-    console.error("Erreur lors de la suppression de la tâche:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Erreur serveur",
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-};
-
-// -----------------------------------------------------
-// POST /api/tasks/:id/subtasks
-// -----------------------------------------------------
-exports.addSubtask = async (req, res) => {
-  try {
     const task = await Task.findById(req.params.id);
-    if (!task)
-      return res.status(404).json({ success: false, message: "Tâche introuvable" });
+    if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
 
-    task.subtasks.push({
-      title: req.body.title,
-      isCompleted: false,
+    const oldStatus = task.status;
+    const oldAssignedTo = task.assignedTo.map(id => id.toString());
+
+    const updatableFields = ['title', 'description', 'status', 'priority', 'estimatedHours', 'startDate', 'dueDate', 'tags', 'assignedTo'];
+    updatableFields.forEach(field => {
+      if (req.body[field] !== undefined) task[field] = req.body[field];
     });
+
+    if (req.body.status === 'completed' && oldStatus !== 'completed') {
+      task.completedAt = new Date();
+    }
 
     await task.save();
 
-    res.status(200).json({ success: true, data: task });
-  } catch (error) {
-    console.error("Erreur lors de l'ajout de la sous-tâche:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Erreur serveur",
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    await History.create({
+      user: req.user.id,
+      action: 'updated',
+      entityType: 'task',
+      entityId: task._id,
+      entityName: task.title,
+      project: task.project
     });
+
+    if (oldStatus !== task.status) {
+      const assignedUsers = task.assignedTo.filter(id => id.toString() !== req.user.id);
+      for (const userId of assignedUsers) {
+        await Notification.create({
+          recipient: userId,
+          sender: req.user.id,
+          type: 'task_updated',
+          title: 'Task status updated',
+          message: `${req.user.firstName} changed task "${task.title}" status to ${task.status}`,
+          relatedTask: task._id,
+          relatedProject: task.project
+        });
+      }
+    }
+
+    if (req.body.assignedTo) {
+      const newAssignees = task.assignedTo.filter(id => !oldAssignedTo.includes(id.toString()));
+      for (const userId of newAssignees) {
+        if (userId.toString() !== req.user.id) {
+          await Notification.create({
+            recipient: userId,
+            sender: req.user.id,
+            type: 'task_assigned',
+            title: 'Task assigned',
+            message: `${req.user.firstName} assigned you to task "${task.title}"`,
+            relatedTask: task._id,
+            relatedProject: task.project
+          });
+        }
+      }
+    }
+
+    const updatedTask = await Task.findById(task._id)
+      .populate('assignedTo', 'firstName lastName email avatar')
+      .populate('createdBy', 'firstName lastName')
+      .populate('project', 'name color');
+
+    res.status(200).json({ success: true, data: updatedTask });
+
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error updating task', error: error.message });
   }
 };
 
-// -----------------------------------------------------
-// PUT /api/tasks/:id/subtasks/:subtaskId
-// -----------------------------------------------------
+// @desc Delete task
+// @route DELETE /api/tasks/:id
+// @access Private
+exports.deleteTask = async (req, res) => {
+  try {
+    const task = await Task.findById(req.params.id);
+    if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
+
+    await task.deleteOne();
+
+    res.status(200).json({ success: true, message: 'Task deleted successfully' });
+
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error deleting task', error: error.message });
+  }
+};
+
+// @desc Add subtask
+// @route POST /api/tasks/:id/subtasks
+// @access Private
+exports.addSubtask = async (req, res) => {
+  try {
+    const { title } = req.body;
+    if (!title) return res.status(400).json({ success: false, message: 'Subtask title is required' });
+
+    const task = await Task.findById(req.params.id);
+    if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
+
+    task.subtasks.push({ title });
+    await task.save();
+
+    res.status(200).json({ success: true, data: task });
+
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error adding subtask', error: error.message });
+  }
+};
+
+// @desc Toggle subtask completion
+// @route PUT /api/tasks/:id/subtasks/:subtaskId
+// @access Private
 exports.toggleSubtask = async (req, res) => {
   try {
     const task = await Task.findById(req.params.id);
-    if (!task)
-      return res.status(404).json({ success: false, message: "Tâche introuvable" });
+    if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
 
     const subtask = task.subtasks.id(req.params.subtaskId);
-    if (!subtask)
-      return res.status(404).json({ success: false, message: "Sous-tâche introuvable" });
+    if (!subtask) return res.status(404).json({ success: false, message: 'Subtask not found' });
 
     subtask.isCompleted = !subtask.isCompleted;
     if (subtask.isCompleted) {
@@ -347,28 +310,21 @@ exports.toggleSubtask = async (req, res) => {
     await task.save();
 
     res.status(200).json({ success: true, data: task });
+
   } catch (error) {
-    console.error("Erreur lors de la modification de la sous-tâche:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Erreur serveur",
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
+    res.status(500).json({ success: false, message: 'Error toggling subtask', error: error.message });
   }
 };
 
-// -----------------------------------------------------
-// POST /api/tasks/:id/attachments
-// -----------------------------------------------------
+// @desc Upload attachment
+// @route POST /api/tasks/:id/attachments
+// @access Private
 exports.uploadAttachment = async (req, res) => {
   try {
     const task = await Task.findById(req.params.id);
-    if (!task)
-      return res.status(404).json({ success: false, message: "Tâche introuvable" });
+    if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
 
-    if (!req.file) {
-      return res.status(400).json({ success: false, message: "Aucun fichier envoyé" });
-    }
+    if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded' });
 
     task.attachments.push({
       filename: req.file.filename,
@@ -376,19 +332,48 @@ exports.uploadAttachment = async (req, res) => {
       mimetype: req.file.mimetype,
       size: req.file.size,
       path: req.file.path,
-      uploadedBy: req.user.id,
-      uploadedAt: new Date()
+      uploadedBy: req.user.id
     });
 
     await task.save();
 
-    res.status(200).json({ success: true, data: task });
-  } catch (error) {
-    console.error("Erreur lors de l'upload du fichier:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Erreur serveur",
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    await History.create({
+      user: req.user.id,
+      action: 'attached_file',
+      entityType: 'task',
+      entityId: task._id,
+      entityName: task.title,
+      project: task.project,
+      details: { filename: req.file.originalname }
     });
+
+    res.status(200).json({ success: true, data: task });
+
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error uploading attachment', error: error.message });
+  }
+};
+
+// @desc Get overdue tasks
+// @route GET /api/tasks/overdue
+// @access Private
+exports.getOverdueTasks = async (req, res) => {
+  try {
+    const teams = await Team.find({ 'members.user': req.user.id });
+    const projects = await Project.find({ team: { $in: teams.map(t => t._id) } });
+
+    const tasks = await Task.find({
+      project: { $in: projects.map(p => p._id) },
+      status: { $ne: 'completed' },
+      dueDate: { $lt: new Date() }
+    })
+      .populate('assignedTo', 'firstName lastName email avatar')
+      .populate('project', 'name color')
+      .sort('dueDate');
+
+    res.status(200).json({ success: true, count: tasks.length, data: tasks });
+
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error fetching overdue tasks', error: error.message });
   }
 };
