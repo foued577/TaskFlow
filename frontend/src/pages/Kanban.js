@@ -26,14 +26,29 @@ const Kanban = () => {
 
   const loadData = async () => {
     try {
+      setLoading(true);
       const [tasksRes, projectsRes] = await Promise.all([
-        tasksAPI.getAll(selectedProject ? { projectId: selectedProject } : {}),
+        tasksAPI.getAll(),
         projectsAPI.getAll(),
       ]);
-      setTasks(tasksRes.data.data);
-      setProjects(projectsRes.data.data);
+
+      let fetchedTasks = tasksRes.data.data || [];
+      const fetchedProjects = projectsRes.data.data || [];
+
+      // Filtrer par projet si sélectionné
+      if (selectedProject) {
+        fetchedTasks = fetchedTasks.filter(task => 
+          task.project && (task.project._id === selectedProject || task.project === selectedProject)
+        );
+      }
+
+      setTasks(fetchedTasks);
+      setProjects(fetchedProjects);
     } catch (error) {
-      toast.error('Erreur lors du chargement');
+      console.error('Erreur lors du chargement:', error);
+      toast.error(error.response?.data?.message || 'Erreur lors du chargement');
+      setTasks([]);
+      setProjects([]);
     } finally {
       setLoading(false);
     }
@@ -67,7 +82,8 @@ const Kanban = () => {
       toast.success('Statut mis à jour');
       loadData();
     } catch (error) {
-      toast.error('Erreur lors de la mise à jour');
+      console.error('Erreur lors de la mise à jour:', error);
+      toast.error(error.response?.data?.message || 'Erreur lors de la mise à jour');
     } finally {
       setDraggedTask(null);
     }
@@ -79,10 +95,10 @@ const Kanban = () => {
 
   const getPriorityColor = (priority) => {
     const colors = {
-      low: 'border-l-blue-500',
-      medium: 'border-l-yellow-500',
-      high: 'border-l-orange-500',
-      urgent: 'border-l-red-500',
+      low: 'bg-blue-100 text-blue-800',
+      medium: 'bg-yellow-100 text-yellow-800',
+      high: 'bg-orange-100 text-orange-800',
+      urgent: 'bg-red-100 text-red-800',
     };
     return colors[priority] || colors.medium;
   };
@@ -101,19 +117,18 @@ const Kanban = () => {
           }}
           className="btn btn-primary flex items-center"
         >
-          <Plus className="w-5 h-5 mr-2" />
-          Nouvelle tâche
+          <Plus className="w-5 h-5 mr-2" /> Nouvelle tâche
         </button>
       </div>
 
-      {/* Filter */}
+      {/* Project Filter */}
       <div className="card mb-6">
-        <div className="flex items-center space-x-4">
-          <Filter className="w-5 h-5 text-gray-600" />
+        <div className="flex items-center gap-4">
+          <Filter className="w-5 h-5 text-gray-500" />
           <select
+            className="input"
             value={selectedProject}
             onChange={(e) => setSelectedProject(e.target.value)}
-            className="input flex-1"
           >
             <option value="">Tous les projets</option>
             {projects.map((project) => (
@@ -131,119 +146,77 @@ const Kanban = () => {
           const columnTasks = getTasksByStatus(column.id);
           
           return (
-            <div key={column.id} className="flex flex-col">
-              {/* Column Header */}
-              <div className={`${column.color} rounded-t-lg p-4 border-b-2 border-gray-300`}>
-                <div className="flex items-center justify-between">
-                  <h3 className="font-bold text-gray-900">{column.title}</h3>
-                  <span className="bg-white px-2 py-1 rounded-full text-sm font-semibold text-gray-700">
-                    {columnTasks.length}
-                  </span>
-                </div>
+            <div
+              key={column.id}
+              className={`${column.color} rounded-lg p-4 min-h-[500px]`}
+              onDragOver={handleDragOver}
+              onDrop={(e) => handleDrop(e, column.id)}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="font-bold text-lg">{column.title}</h2>
+                <span className="badge bg-white text-gray-700">
+                  {columnTasks.length}
+                </span>
               </div>
 
-              {/* Column Content */}
-              <div
-                onDragOver={handleDragOver}
-                onDrop={(e) => handleDrop(e, column.id)}
-                className="flex-1 bg-gray-50 rounded-b-lg p-4 min-h-[500px]"
-              >
-                <div className="space-y-3">
-                  {columnTasks.map((task) => (
+              <div className="space-y-3">
+                {columnTasks.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <p className="text-sm">Aucune tâche</p>
+                    <p className="text-xs mt-1">Glissez-déposez une tâche ici</p>
+                  </div>
+                ) : (
+                  columnTasks.map((task) => (
                     <div
                       key={task._id}
                       draggable
                       onDragStart={(e) => handleDragStart(e, task)}
                       onClick={() => handleTaskClick(task)}
-                      className={`bg-white rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow cursor-pointer border-l-4 ${getPriorityColor(task.priority)} ${
-                        draggedTask?._id === task._id ? 'opacity-50' : ''
-                      }`}
+                      className="bg-white rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
                     >
-                      {/* Task Title */}
-                      <h4 className="font-semibold text-gray-900 mb-2">{task.title}</h4>
+                      <div className="flex items-start justify-between mb-2">
+                        <h3 className="font-medium text-gray-900">{task.title}</h3>
+                        <span className={`badge ${getPriorityColor(task.priority)} text-xs`}>
+                          {task.priority}
+                        </span>
+                      </div>
 
-                      {/* Project Badge */}
-                      {task.project && (
-                        <div className="flex items-center mb-2">
-                          <div
-                            className="w-2 h-2 rounded-full mr-2"
-                            style={{ backgroundColor: task.project.color }}
-                          />
-                          <span className="text-xs text-gray-600">{task.project.name}</span>
-                        </div>
-                      )}
-
-                      {/* Task Description */}
                       {task.description && (
-                        <p className="text-sm text-gray-600 mb-3 line-clamp-2">
+                        <p className="text-sm text-gray-600 mb-2 line-clamp-2">
                           {task.description}
                         </p>
                       )}
 
-                      {/* Task Meta */}
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                          {/* Priority Badge */}
-                          <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-700">
-                            {task.priority}
-                          </span>
-
-                          {/* Subtasks Progress */}
-                          {task.subtasks && task.subtasks.length > 0 && (
-                            <span className="text-xs px-2 py-1 rounded bg-indigo-100 text-indigo-800">
-                              ✓ {task.subtasks.filter(st => st.isCompleted).length}/{task.subtasks.length}
-                            </span>
-                          )}
+                      {task.project && (
+                        <div className="flex items-center text-xs text-gray-500 mb-2">
+                          <span
+                            className="w-2 h-2 rounded-full mr-2"
+                            style={{ backgroundColor: task.project.color }}
+                          />
+                          {task.project.name}
                         </div>
+                      )}
 
-                        {/* Assigned Users */}
-                        {task.assignedTo && task.assignedTo.length > 0 && (
-                          <div className="flex -space-x-2">
-                            {task.assignedTo.slice(0, 3).map((user, index) => (
-                              <div
-                                key={user._id || index}
-                                className="w-6 h-6 rounded-full bg-primary-600 flex items-center justify-center text-white text-xs font-semibold border-2 border-white"
-                                title={`${user.firstName} ${user.lastName}`}
-                              >
-                                {user.firstName?.charAt(0)}{user.lastName?.charAt(0)}
-                              </div>
-                            ))}
-                            {task.assignedTo.length > 3 && (
-                              <div className="w-6 h-6 rounded-full bg-gray-300 flex items-center justify-center text-gray-700 text-xs font-semibold border-2 border-white">
-                                +{task.assignedTo.length - 3}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Due Date */}
-                      {task.dueDate && (
-                        <div className="mt-3 pt-3 border-t border-gray-200">
-                          <div className="flex items-center text-xs text-gray-500">
-                            <span>📅</span>
-                            <span className="ml-1">
-                              {new Date(task.dueDate).toLocaleDateString('fr-FR', {
-                                day: 'numeric',
-                                month: 'short',
-                              })}
+                      {task.assignedTo && task.assignedTo.length > 0 && (
+                        <div className="flex items-center gap-1">
+                          {task.assignedTo.slice(0, 3).map((person, index) => (
+                            <span
+                              key={person._id || person || index}
+                              className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-purple-100 text-purple-800 text-xs font-semibold"
+                              title={person.firstName && person.lastName ? `${person.firstName} ${person.lastName}` : ''}
+                            >
+                              {person.firstName ? person.firstName[0] : ''}
+                              {person.lastName ? person.lastName[0] : ''}
                             </span>
-                            {new Date(task.dueDate) < new Date() && task.status !== 'completed' && (
-                              <span className="ml-2 text-red-600 font-semibold">En retard</span>
-                            )}
-                          </div>
+                          ))}
+                          {task.assignedTo.length > 3 && (
+                            <span className="text-xs text-gray-500">+{task.assignedTo.length - 3}</span>
+                          )}
                         </div>
                       )}
                     </div>
-                  ))}
-
-                  {columnTasks.length === 0 && (
-                    <div className="text-center py-8 text-gray-400">
-                      <p className="text-sm">Aucune tâche</p>
-                      <p className="text-xs mt-1">Glissez-déposez une tâche ici</p>
-                    </div>
-                  )}
-                </div>
+                  ))
+                )}
               </div>
             </div>
           );
@@ -254,16 +227,11 @@ const Kanban = () => {
       {showModal && (
         <TaskModal
           task={selectedTask}
-          projects={projects}
           onClose={() => {
             setShowModal(false);
             setSelectedTask(null);
           }}
-          onSave={() => {
-            setShowModal(false);
-            setSelectedTask(null);
-            loadData();
-          }}
+          onUpdate={loadData}
         />
       )}
     </div>
