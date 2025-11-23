@@ -1,170 +1,299 @@
-const User = require("../models/User");
-const bcrypt = require("bcryptjs");
+const Team = require('../models/Team');
+const User = require('../models/User');
+const History = require('../models/History');
+const Notification = require('../models/Notification');
 
-// --------------------------------------------------------
-// @desc    Get all users (ADMIN ONLY)
-// @route   GET /api/users
-// @access  Private/Admin
-// --------------------------------------------------------
-exports.getUsers = async (req, res) => {
+// @desc    Create new team
+// @route   POST /api/teams
+// @access  Private
+exports.createTeam = async (req, res) => {
   try {
-    const users = await User.find().select("-password");
+    const { name, description, color, memberIds } = req.body;
 
-    res.status(200).json({
-      success: true,
-      count: users.length,
-      data: users,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Erreur lors du chargement des utilisateurs",
-    });
-  }
-};
-
-// --------------------------------------------------------
-// @desc    Get a single user (ADMIN ONLY)
-// @route   GET /api/users/:id
-// @access  Private/Admin
-// --------------------------------------------------------
-exports.getUser = async (req, res) => {
-  try {
-    const user = await User.findById(req.params.id).select("-password");
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "Utilisateur introuvable",
-      });
-    }
-
-    res.status(200).json({
-      success: true,
-      data: user,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Erreur lors de la récupération de l'utilisateur",
-    });
-  }
-};
-
-// --------------------------------------------------------
-// @desc    Create a new user (ADMIN ONLY)
-// @route   POST /api/users
-// @access  Private/Admin
-// --------------------------------------------------------
-exports.createUser = async (req, res) => {
-  try {
-    const { firstName, lastName, email, password, role } = req.body;
-
-    if (!password || password.length < 6) {
+    if (!name) {
       return res.status(400).json({
         success: false,
-        message: "Le mot de passe doit contenir au moins 6 caractères",
+        message: 'Team name is required'
       });
     }
 
-    const emailExists = await User.findOne({ email });
-    if (emailExists) {
-      return res.status(400).json({
-        success: false,
-        message: "Cet email est déjà utilisé",
-      });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const newUser = await User.create({
-      firstName,
-      lastName,
-      email,
-      password: hashedPassword,
-      role: role || "member",
-      isActive: true,
+    // Create team with creator as first member
+    const team = await Team.create({
+      name,
+      description,
+      color: color || '#3B82F6',
+      createdBy: req.user.id,
+      members: [{ user: req.user.id }]
     });
+
+    // Add additional members if provided
+    if (memberIds && Array.isArray(memberIds)) {
+      for (const memberId of memberIds) {
+        if (memberId !== req.user.id.toString()) {
+          team.members.push({ user: memberId });
+          
+          // Update user's teams
+          await User.findByIdAndUpdate(memberId, {
+            $addToSet: { teams: team._id }
+          });
+
+          // Create notification
+          await Notification.create({
+            recipient: memberId,
+            sender: req.user.id,
+            type: 'team_added',
+            title: 'Added to team',
+            message: `You have been added to team "${name}"`,
+            relatedTeam: team._id
+          });
+        }
+      }
+      await team.save();
+    }
+
+    // Update creator's teams
+    await User.findByIdAndUpdate(req.user.id, {
+      $addToSet: { teams: team._id }
+    });
+
+    // Create history entry
+    await History.create({
+      user: req.user.id,
+      action: 'created',
+      entityType: 'team',
+      entityId: team._id,
+      entityName: name
+    });
+
+    const populatedTeam = await Team.findById(team._id)
+      .populate('members.user', 'firstName lastName email avatar')
+      .populate('createdBy', 'firstName lastName');
 
     res.status(201).json({
       success: true,
-      message: "Utilisateur créé avec succès",
-      data: {
-        _id: newUser._id,
-        firstName: newUser.firstName,
-        lastName: newUser.lastName,
-        email: newUser.email,
-        role: newUser.role,
-      },
+      data: populatedTeam
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: "Erreur lors de la création de l'utilisateur",
-      error: error.message,
+      message: 'Error creating team',
+      error: error.message
     });
   }
 };
 
-// --------------------------------------------------------
-// @desc    Update a user (ADMIN ONLY)
-// @route   PUT /api/users/:id
-// @access  Private/Admin
-// --------------------------------------------------------
-exports.updateUser = async (req, res) => {
+// @desc    Get all user's teams
+// @route   GET /api/teams
+// @access  Private
+exports.getTeams = async (req, res) => {
   try {
-    const { firstName, lastName, email, role, isActive } = req.body;
+    const teams = await Team.find({
+      'members.user': req.user.id,
+      isActive: true
+    })
+    .populate('members.user', 'firstName lastName email avatar')
+    .populate('createdBy', 'firstName lastName')
+    .sort('-createdAt');
 
-    const updatedUser = await User.findByIdAndUpdate(
-      req.params.id,
-      { firstName, lastName, email, role, isActive },
-      { new: true }
-    ).select("-password");
+    res.status(200).json({
+      success: true,
+      count: teams.length,
+      data: teams
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching teams',
+      error: error.message
+    });
+  }
+};
 
-    if (!updatedUser) {
+// @desc    Get single team
+// @route   GET /api/teams/:id
+// @access  Private
+exports.getTeam = async (req, res) => {
+  try {
+    const team = await Team.findById(req.params.id)
+      .populate('members.user', 'firstName lastName email avatar bio phone')
+      .populate('createdBy', 'firstName lastName');
+
+    if (!team) {
       return res.status(404).json({
         success: false,
-        message: "Utilisateur introuvable",
+        message: 'Team not found'
+      });
+    }
+
+    // Check if user is member
+    const isMember = team.members.some(m => m.user._id.toString() === req.user.id);
+    if (!isMember) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to access this team'
       });
     }
 
     res.status(200).json({
       success: true,
-      message: "Utilisateur mis à jour",
-      data: updatedUser,
+      data: team
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: "Erreur lors de la mise à jour",
+      message: 'Error fetching team',
+      error: error.message
     });
   }
 };
 
-// --------------------------------------------------------
-// @desc    Delete user (ADMIN ONLY)
-// @route   DELETE /api/users/:id
-// @access  Private/Admin
-// --------------------------------------------------------
-exports.deleteUser = async (req, res) => {
+// @desc    Update team
+// @route   PUT /api/teams/:id
+// @access  Private
+exports.updateTeam = async (req, res) => {
   try {
-    const deleted = await User.findByIdAndDelete(req.params.id);
+    const { name, description, color } = req.body;
 
-    if (!deleted) {
+    const team = await Team.findById(req.params.id);
+
+    if (!team) {
       return res.status(404).json({
         success: false,
-        message: "Utilisateur introuvable",
+        message: 'Team not found'
       });
     }
 
+    // Check if user is member
+    const isMember = team.members.some(m => m.user.toString() === req.user.id);
+    if (!isMember) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized'
+      });
+    }
+
+    if (name) team.name = name;
+    if (description !== undefined) team.description = description;
+    if (color) team.color = color;
+
+    await team.save();
+
+    // Create history entry
+    await History.create({
+      user: req.user.id,
+      action: 'updated',
+      entityType: 'team',
+      entityId: team._id,
+      entityName: team.name
+    });
+
+    const updatedTeam = await Team.findById(team._id)
+      .populate('members.user', 'firstName lastName email avatar')
+      .populate('createdBy', 'firstName lastName');
+
     res.status(200).json({
       success: true,
-      message: "Utilisateur supprimé définitivement",
+      data: updatedTeam
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: "Erreur lors de la suppression",
+      message: 'Error updating team',
+      error: error.message
+    });
+  }
+};
+
+// @desc    Add member to team
+// @route   POST /api/teams/:id/members
+// @access  Private
+exports.addMember = async (req, res) => {
+  try {
+    const { userId } = req.body;
+
+    const team = await Team.findById(req.params.id);
+
+    if (!team) {
+      return res.status(404).json({
+        success: false,
+        message: 'Team not found'
+      });
+    }
+
+    // Check if user already a member
+    const alreadyMember = team.members.some(m => m.user.toString() === userId);
+    if (alreadyMember) {
+      return res.status(400).json({
+        success: false,
+        message: 'User is already a member'
+      });
+    }
+
+    team.members.push({ user: userId });
+    await team.save();
+
+    // Update user's teams
+    await User.findByIdAndUpdate(userId, {
+      $addToSet: { teams: team._id }
+    });
+
+    // Create notification
+    await Notification.create({
+      recipient: userId,
+      sender: req.user.id,
+      type: 'team_added',
+      title: 'Added to team',
+      message: `You have been added to team "${team.name}"`,
+      relatedTeam: team._id
+    });
+
+    const updatedTeam = await Team.findById(team._id)
+      .populate('members.user', 'firstName lastName email avatar');
+
+    res.status(200).json({
+      success: true,
+      data: updatedTeam
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error adding member',
+      error: error.message
+    });
+  }
+};
+
+// @desc    Remove member from team
+// @route   DELETE /api/teams/:id/members/:userId
+// @access  Private
+exports.removeMember = async (req, res) => {
+  try {
+    const team = await Team.findById(req.params.id);
+
+    if (!team) {
+      return res.status(404).json({
+        success: false,
+        message: 'Team not found'
+      });
+    }
+
+    team.members = team.members.filter(m => m.user.toString() !== req.params.userId);
+    await team.save();
+
+    // Update user's teams
+    await User.findByIdAndUpdate(req.params.userId, {
+      $pull: { teams: team._id }
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Member removed successfully'
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error removing member',
+      error: error.message
     });
   }
 };
