@@ -1,6 +1,8 @@
 const Task = require("../models/Task");
 const Project = require("../models/Project");
 const Team = require("../models/Team");
+const path = require("path");
+const fs = require("fs");
 
 // -----------------------------------------------------
 // GET /api/tasks — Admin = toutes les tâches
@@ -11,12 +13,10 @@ exports.getTasks = async (req, res) => {
     let tasks;
 
     if (req.user.role === "admin") {
-      // Admin : toutes les tâches
       tasks = await Task.find()
         .populate("project", "name color team")
         .populate("assignedTo", "firstName lastName email");
     } else {
-      // Membre : uniquement tâches des projets d'équipes dont il fait partie
       const teams = await Team.find({ "members.user": req.user.id }).select("_id");
 
       const projects = await Project.find({ team: { $in: teams } }).select("_id");
@@ -25,6 +25,26 @@ exports.getTasks = async (req, res) => {
         .populate("project", "name color team")
         .populate("assignedTo", "firstName lastName email");
     }
+
+    res.status(200).json({ success: true, data: tasks });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Erreur serveur" });
+  }
+};
+
+// -----------------------------------------------------
+// GET /api/tasks/overdue - Tâches en retard
+// -----------------------------------------------------
+exports.getOverdueTasks = async (req, res) => {
+  try {
+    const now = new Date();
+
+    const tasks = await Task.find({
+      dueDate: { $lt: now },
+      status: { $ne: "completed" }
+    })
+      .populate("project", "name color team")
+      .populate("assignedTo", "firstName lastName email");
 
     res.status(200).json({ success: true, data: tasks });
   } catch (error) {
@@ -44,7 +64,6 @@ exports.getTask = async (req, res) => {
     if (!task)
       return res.status(404).json({ success: false, message: "Tâche introuvable" });
 
-    // Vérifier si user a accès au projet
     if (req.user.role !== "admin") {
       const project = await Project.findById(task.project);
       const team = await Team.findById(project.team);
@@ -73,17 +92,14 @@ exports.createTask = async (req, res) => {
       });
     }
 
-    const { title, description, status, priority, project, assignedTo, dueDate } =
-      req.body;
-
     const task = await Task.create({
-      title,
-      description,
-      status,
-      priority,
-      project,
-      assignedTo,
-      dueDate,
+      title: req.body.title,
+      description: req.body.description,
+      status: req.body.status,
+      priority: req.body.priority,
+      project: req.body.project,
+      assignedTo: req.body.assignedTo,
+      dueDate: req.body.dueDate,
       createdBy: req.user.id,
     });
 
@@ -94,7 +110,7 @@ exports.createTask = async (req, res) => {
 };
 
 // -----------------------------------------------------
-// PUT /api/tasks/:id — Admin ou membre du projet assigné
+// PUT /api/tasks/:id
 // -----------------------------------------------------
 exports.updateTask = async (req, res) => {
   try {
@@ -103,7 +119,6 @@ exports.updateTask = async (req, res) => {
     if (!task)
       return res.status(404).json({ success: false, message: "Tâche introuvable" });
 
-    // Vérifier autorisations
     if (req.user.role !== "admin") {
       const project = await Project.findById(task.project);
       const team = await Team.findById(project.team);
@@ -134,7 +149,7 @@ exports.updateTask = async (req, res) => {
 };
 
 // -----------------------------------------------------
-// DELETE /api/tasks/:id — Admin seulement
+// DELETE /api/tasks/:id — Admin
 // -----------------------------------------------------
 exports.deleteTask = async (req, res) => {
   try {
@@ -151,6 +166,77 @@ exports.deleteTask = async (req, res) => {
       return res.status(404).json({ success: false, message: "Tâche introuvable" });
 
     res.status(200).json({ success: true, message: "Tâche supprimée" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Erreur serveur" });
+  }
+};
+
+// -----------------------------------------------------
+// POST /api/tasks/:id/subtasks
+// -----------------------------------------------------
+exports.addSubtask = async (req, res) => {
+  try {
+    const task = await Task.findById(req.params.id);
+    if (!task)
+      return res.status(404).json({ success: false, message: "Tâche introuvable" });
+
+    task.subtasks.push({
+      title: req.body.title,
+      completed: false,
+    });
+
+    await task.save();
+
+    res.status(200).json({ success: true, data: task });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Erreur serveur" });
+  }
+};
+
+// -----------------------------------------------------
+// PUT /api/tasks/:id/subtasks/:subtaskId
+// -----------------------------------------------------
+exports.toggleSubtask = async (req, res) => {
+  try {
+    const task = await Task.findById(req.params.id);
+    if (!task)
+      return res.status(404).json({ success: false, message: "Tâche introuvable" });
+
+    const subtask = task.subtasks.id(req.params.subtaskId);
+    if (!subtask)
+      return res.status(404).json({ success: false, message: "Sous-tâche introuvable" });
+
+    subtask.completed = !subtask.completed;
+
+    await task.save();
+
+    res.status(200).json({ success: true, data: task });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Erreur serveur" });
+  }
+};
+
+// -----------------------------------------------------
+// POST /api/tasks/:id/attachments
+// -----------------------------------------------------
+exports.uploadAttachment = async (req, res) => {
+  try {
+    const task = await Task.findById(req.params.id);
+    if (!task)
+      return res.status(404).json({ success: false, message: "Tâche introuvable" });
+
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: "Aucun fichier envoyé" });
+    }
+
+    task.attachments.push({
+      filename: req.file.filename,
+      url: `/uploads/${req.file.filename}`,
+    });
+
+    await task.save();
+
+    res.status(200).json({ success: true, data: task });
   } catch (error) {
     res.status(500).json({ success: false, message: "Erreur serveur" });
   }
