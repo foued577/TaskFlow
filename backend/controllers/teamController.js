@@ -7,12 +7,26 @@ const User = require("../models/User");
 exports.getTeams = async (req, res) => {
   try {
     const teams = await Team.find()
-      .populate("members.user", "firstName lastName email")
-      .populate("projects", "name color");
+      .populate("members.user", "firstName lastName email");
 
-    res.status(200).json({ success: true, data: teams });
+    // S'assurer que tous les champs optionnels existent
+    const teamsWithSafeData = teams.map(team => {
+      const teamObj = team.toObject();
+      return {
+        ...teamObj,
+        members: teamObj.members || [],
+        projects: [] // Le modèle Team n'a pas de champ projects, mais on le garde pour compatibilité
+      };
+    });
+
+    res.status(200).json({ success: true, data: teamsWithSafeData });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Erreur serveur" });
+    console.error("Erreur lors du chargement des équipes:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Erreur serveur",
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 
@@ -22,8 +36,7 @@ exports.getTeams = async (req, res) => {
 exports.getTeam = async (req, res) => {
   try {
     const team = await Team.findById(req.params.id)
-      .populate("members.user", "firstName lastName email")
-      .populate("projects", "name color");
+      .populate("members.user", "firstName lastName email");
 
     if (!team) {
       return res.status(404).json({
@@ -32,9 +45,22 @@ exports.getTeam = async (req, res) => {
       });
     }
 
-    res.status(200).json({ success: true, data: team });
+    const teamObj = team.toObject();
+    res.status(200).json({ 
+      success: true, 
+      data: {
+        ...teamObj,
+        members: teamObj.members || [],
+        projects: []
+      }
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Erreur serveur" });
+    console.error("Erreur lors de la récupération de l'équipe:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Erreur serveur",
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 
@@ -62,7 +88,12 @@ exports.createTeam = async (req, res) => {
 
     res.status(201).json({ success: true, data: team });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Erreur serveur" });
+    console.error("Erreur lors de la création de l'équipe:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Erreur serveur",
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 
@@ -86,7 +117,7 @@ exports.updateTeam = async (req, res) => {
     if (!isTeamAdmin && !isGlobalAdmin) {
       return res.status(403).json({
         success: false,
-        message: "Vous n’avez pas les droits pour modifier cette équipe",
+        message: "Vous n'avez pas les droits pour modifier cette équipe",
       });
     }
 
@@ -98,7 +129,12 @@ exports.updateTeam = async (req, res) => {
 
     res.status(200).json({ success: true, data: team });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Erreur serveur" });
+    console.error("Erreur lors de la mise à jour de l'équipe:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Erreur serveur",
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 
@@ -122,7 +158,7 @@ exports.addMember = async (req, res) => {
     if (!isTeamAdmin && !isGlobalAdmin) {
       return res.status(403).json({
         success: false,
-        message: "Vous n’avez pas les droits pour ajouter un membre",
+        message: "Vous n'avez pas les droits pour ajouter un membre",
       });
     }
 
@@ -136,7 +172,11 @@ exports.addMember = async (req, res) => {
       });
     }
 
-    const already = team.members.some((m) => m.user.toString() === userId);
+    const already = team.members.some((m) => {
+      if (!m.user) return false;
+      return m.user.toString() === userId.toString();
+    });
+    
     if (already) {
       return res.status(400).json({
         success: false,
@@ -149,7 +189,12 @@ exports.addMember = async (req, res) => {
 
     res.status(200).json({ success: true, data: team });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Erreur serveur" });
+    console.error("Erreur lors de l'ajout du membre:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Erreur serveur",
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 
@@ -174,18 +219,26 @@ exports.removeMember = async (req, res) => {
     if (!isTeamAdmin && !isGlobalAdmin) {
       return res.status(403).json({
         success: false,
-        message: "Vous n’avez pas les droits pour retirer un membre",
+        message: "Vous n'avez pas les droits pour retirer un membre",
       });
     }
 
     team.members = team.members.filter(
-      (m) => m.user.toString() !== userId
+      (m) => {
+        if (!m.user) return true;
+        return m.user.toString() !== userId.toString();
+      }
     );
 
     await team.save();
 
     res.status(200).json({ success: true, data: team });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Erreur serveur" });
+    console.error("Erreur lors du retrait du membre:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Erreur serveur",
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
