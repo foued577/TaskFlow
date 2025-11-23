@@ -40,29 +40,6 @@ exports.getTasks = async (req, res) => {
       const taskObj = task.toObject();
       return {
         ...taskObj,
-        assignedTo: taskObj.assignedTo || []
-      };
-    });
-
-    res.status(200).json({ success: true, data: safeTasks });
-  } catch (error) {
-    console.error("Erreur lors du chargement des tâches:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Erreur serveur",
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-};
-        .populate("project", "name color team teams")
-        .populate("assignedTo", "firstName lastName email");
-    }
-
-    // S'assurer que assignedTo est toujours un tableau
-    const safeTasks = tasks.map(task => {
-      const taskObj = task.toObject();
-      return {
-        ...taskObj,
         assignedTo: taskObj.assignedTo || [],
         subtasks: taskObj.subtasks || []
       };
@@ -93,10 +70,19 @@ exports.getOverdueTasks = async (req, res) => {
       .populate("project", "name color team teams")
       .populate("assignedTo", "firstName lastName email");
 
+    // S'assurer que assignedTo est toujours un tableau
+    const safeTasks = tasks.map(task => {
+      const taskObj = task.toObject();
+      return {
+        ...taskObj,
+        assignedTo: taskObj.assignedTo || []
+      };
+    });
+
     res.status(200).json({ 
       success: true, 
-      count: tasks.length,
-      data: tasks 
+      count: safeTasks.length,
+      data: safeTasks 
     });
   } catch (error) {
     console.error("Erreur lors du chargement des tâches en retard:", error);
@@ -126,6 +112,7 @@ exports.getTask = async (req, res) => {
         return res.status(403).json({ success: false, message: "Accès refusé" });
       }
 
+      // Gérer team (ancien) ou teams (nouveau)
       const projectTeam = project.team || (project.teams && project.teams[0]);
       if (!projectTeam) {
         return res.status(403).json({ success: false, message: "Accès refusé" });
@@ -220,6 +207,7 @@ exports.updateTask = async (req, res) => {
         return res.status(403).json({ success: false, message: "Accès refusé" });
       }
 
+      // Gérer team (ancien) ou teams (nouveau)
       const projectTeam = project.team || (project.teams && project.teams[0]);
       if (!projectTeam) {
         return res.status(403).json({ success: false, message: "Accès refusé" });
