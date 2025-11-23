@@ -11,17 +11,17 @@ const {
 
 const { protect, adminOnly } = require('../middleware/auth');
 
-// Toutes les routes nécessitent un token
+// Toutes les routes nécessitent un token valide
 router.use(protect);
 
-// Seul l'admin peut gérer les utilisateurs
+// ADMIN SEULEMENT → peut gérer les utilisateurs
 router.route('/')
-  .get(adminOnly, getUsers)
-  .post(adminOnly, createUser);
+  .get(adminOnly, getUsers)     // liste utilisateurs
+  .post(adminOnly, createUser); // création d'utilisateur par admin
 
 router.route('/:id')
-  .get(adminOnly, getUser)
-  .put(adminOnly, updateUser)
-  .delete(adminOnly, deleteUser);
+  .get(adminOnly, getUser)      // récupérer user
+  .put(adminOnly, updateUser)   // modifier user
+  .delete(adminOnly, deleteUser); // supprimer user
 
 module.exports = router;
