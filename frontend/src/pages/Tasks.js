@@ -60,26 +60,35 @@ const Tasks = () => {
     try {
       setLoading(true);
 
-      let query = { ...filters };
-      Object.keys(query).forEach((key) => !query[key] && delete query[key]);
-
-      // FILTRAGE DES MEMBRES
-      if (!isAdmin) {
-        query.filterType = "assignedToMeOrUnassigned";
-      }
-
-      // ADMIN — filtres spécifiques
-      if (taskView === "assigned") query.filterType = "assignedToMe";
-      if (taskView === "created_not_assigned")
-        query.filterType = "createdByMeNotAssignedToMe";
-
       const tasksRes = isOverdueMode
         ? await tasksAPI.getOverdue()
-        : await tasksAPI.getAll(query);
+        : await tasksAPI.getAll();
 
       const projectsRes = await projectsAPI.getAll();
 
-      let fetchedTasks = tasksRes.data.data;
+      let fetchedTasks = tasksRes.data.data || [];
+      const fetchedProjects = projectsRes.data.data || [];
+
+      // Filtrer côté client si nécessaire
+      if (filters.projectId) {
+        fetchedTasks = fetchedTasks.filter(t => t.project?._id === filters.projectId);
+      }
+      if (filters.status) {
+        fetchedTasks = fetchedTasks.filter(t => t.status === filters.status);
+      }
+      if (filters.priority) {
+        fetchedTasks = fetchedTasks.filter(t => t.priority === filters.priority);
+      }
+
+      // Filtrer pour les membres non-admin
+      if (!isAdmin) {
+        fetchedTasks = fetchedTasks.filter(task => {
+          if (!task.assignedTo || task.assignedTo.length === 0) return true;
+          return task.assignedTo.some(assignee => 
+            assignee._id === user.id || assignee === user.id
+          );
+        });
+      }
 
       // Trier
       fetchedTasks.sort((a, b) => {
@@ -92,15 +101,17 @@ const Tasks = () => {
       });
 
       setTasks(fetchedTasks);
-      setProjects(projectsRes.data.data);
-    } catch {
-      toast.error("Erreur lors du chargement des tâches");
+      setProjects(fetchedProjects);
+    } catch (error) {
+      console.error("Erreur lors du chargement des tâches:", error);
+      toast.error(error.response?.data?.message || "Erreur lors du chargement des tâches");
+      setTasks([]);
+      setProjects([]);
     } finally {
       setLoading(false);
     }
   };
 
-  // EMPÊCHER L’OUVERTURE DU MODAL POUR LES MEMBRES
   const handleTaskClick = (task) => {
     if (!isAdmin) return;
     setSelectedTask(task);
@@ -113,50 +124,40 @@ const Tasks = () => {
     setSelectedTask(null);
   };
 
-  // PERMISSION DE CHANGER LE STATUT
   const updateTaskStatus = async (taskId, newStatus, task) => {
-    if (!isAdmin) {
-      // Membre peut modifier uniquement ses tâches assignées
-      const isAssignedToUser = task.assignedTo?.some(
-        (u) => u._id === user._id || u._id === user.id
-      );
-
-      if (!isAssignedToUser) {
-        toast.error("Vous ne pouvez changer le statut que de vos propres tâches");
-        return;
-      }
+    if (!isAdmin && task.assignedTo && !task.assignedTo.some(a => a._id === user.id || a === user.id)) {
+      toast.error("Vous n'êtes pas assigné à cette tâche");
+      return;
     }
 
     try {
       await tasksAPI.update(taskId, { status: newStatus });
       toast.success("Statut mis à jour");
       loadData();
-    } catch {
-      toast.error("Erreur lors du changement de statut");
+    } catch (error) {
+      console.error("Erreur lors de la mise à jour:", error);
+      toast.error(error.response?.data?.message || "Erreur lors de la mise à jour");
     }
   };
 
-  const getPriorityColor = (priority) =>
-    ({
+  const getPriorityColor = (priority) => {
+    const colors = {
       low: "bg-blue-100 text-blue-800",
       medium: "bg-yellow-100 text-yellow-800",
       high: "bg-orange-100 text-orange-800",
       urgent: "bg-red-100 text-red-800",
-    }[priority] || "bg-gray-100 text-gray-800");
+    };
+    return colors[priority] || colors.medium;
+  };
 
-  const getStatusColor = (status) =>
-    ({
+  const getStatusColor = (status) => {
+    const colors = {
       not_started: "bg-gray-100 text-gray-800",
       in_progress: "bg-blue-100 text-blue-800",
       completed: "bg-green-100 text-green-800",
-    }[status] || "bg-gray-100 text-gray-800");
-
-  const getStatusLabel = (status) =>
-    ({
-      not_started: "Non démarrée",
-      in_progress: "En cours",
-      completed: "Terminée",
-    }[status] || status);
+    };
+    return colors[status] || colors.not_started;
+  };
 
   if (loading) return <Loading fullScreen={false} />;
 
@@ -164,10 +165,7 @@ const Tasks = () => {
     <div>
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">
-          {isOverdueMode ? "Tâches en retard" : "Tâches"}
-        </h1>
-
+        <h1 className="text-2xl font-bold text-gray-900">Tâches</h1>
         {isAdmin && (
           <button
             onClick={() => {
@@ -181,70 +179,62 @@ const Tasks = () => {
         )}
       </div>
 
-      {/* Filtres pour admin */}
-      {!isOverdueMode && isAdmin && (
-        <div className="card mb-6 p-4">
-          <div className="flex items-center mb-4">
-            <Filter className="w-5 h-5 mr-2 text-gray-600" />
-            <h3 className="text-lg font-semibold text-gray-900">Filtres</h3>
-          </div>
+      {/* Filters */}
+      <div className="card mb-6">
+        <div className="flex items-center gap-4 mb-4">
+          <Filter className="w-5 h-5 text-gray-500" />
+          <span className="font-medium">Filtres</span>
+        </div>
 
-          <div className="flex gap-2 mb-4">
+        <div className="space-y-4">
+          {/* Task View Toggles */}
+          <div className="flex gap-2">
             <button
-              className={`btn ${taskView === "all" ? "btn-primary" : "btn-light"}`}
               onClick={() => setTaskView("all")}
+              className={`btn ${taskView === "all" ? "btn-primary" : "btn-secondary"}`}
             >
               Toutes les tâches
             </button>
-
             <button
-              className={`btn ${
-                taskView === "assigned" ? "btn-primary" : "btn-light"
-              }`}
               onClick={() => setTaskView("assigned")}
+              className={`btn ${taskView === "assigned" ? "btn-primary" : "btn-secondary"}`}
             >
               Tâches où je suis assigné
             </button>
-
-            <button
-              className={`btn ${
-                taskView === "created_not_assigned" ? "btn-primary" : "btn-light"
-              }`}
-              onClick={() => setTaskView("created_not_assigned")}
-            >
-              Créées par moi mais non assignées
-            </button>
+            {isAdmin && (
+              <button
+                onClick={() => setTaskView("created_not_assigned")}
+                className={`btn ${taskView === "created_not_assigned" ? "btn-primary" : "btn-secondary"}`}
+              >
+                Créées par moi mais non assignées
+              </button>
+            )}
           </div>
 
+          {/* Dropdown Filters */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Projet */}
             <div>
-              <label className="block text-sm mb-2">Projet</label>
+              <label className="text-sm font-medium mb-2 block">Projet</label>
               <select
-                value={filters.projectId}
-                onChange={(e) =>
-                  setFilters({ ...filters, projectId: e.target.value })
-                }
                 className="input"
+                value={filters.projectId}
+                onChange={(e) => setFilters({ ...filters, projectId: e.target.value })}
               >
                 <option value="">Tous les projets</option>
-                {projects.map((p) => (
-                  <option key={p._id} value={p._id}>
-                    {p.name}
+                {projects.map((project) => (
+                  <option key={project._id} value={project._id}>
+                    {project.name}
                   </option>
                 ))}
               </select>
             </div>
 
-            {/* Statut */}
             <div>
-              <label className="block text-sm mb-2">Statut</label>
+              <label className="text-sm font-medium mb-2 block">Statut</label>
               <select
-                value={filters.status}
-                onChange={(e) =>
-                  setFilters({ ...filters, status: e.target.value })
-                }
                 className="input"
+                value={filters.status}
+                onChange={(e) => setFilters({ ...filters, status: e.target.value })}
               >
                 <option value="">Tous</option>
                 <option value="not_started">Non démarrée</option>
@@ -253,15 +243,12 @@ const Tasks = () => {
               </select>
             </div>
 
-            {/* Priorité */}
             <div>
-              <label className="block text-sm mb-2">Priorité</label>
+              <label className="text-sm font-medium mb-2 block">Priorité</label>
               <select
-                value={filters.priority}
-                onChange={(e) =>
-                  setFilters({ ...filters, priority: e.target.value })
-                }
                 className="input"
+                value={filters.priority}
+                onChange={(e) => setFilters({ ...filters, priority: e.target.value })}
               >
                 <option value="">Toutes</option>
                 <option value="low">Basse</option>
@@ -272,124 +259,120 @@ const Tasks = () => {
             </div>
           </div>
         </div>
-      )}
+      </div>
 
-      {/* Liste des tâches */}
+      {/* Tasks List */}
       {tasks.length === 0 ? (
         <div className="card text-center py-12">
           <CheckSquare className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-          <h3 className="text-lg font-medium">Aucune tâche</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Aucune tâche</h3>
+          {isAdmin && (
+            <button
+              onClick={() => {
+                setSelectedTask(null);
+                setShowModal(true);
+              }}
+              className="btn btn-primary mt-3"
+            >
+              Créer une tâche
+            </button>
+          )}
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           <AnimatePresence>
-            {tasks.map((task) => {
-              const isOverdue =
-                task.dueDate &&
-                new Date(task.dueDate) < new Date() &&
-                task.status !== "completed";
+            {tasks.map((task) => (
+              <motion.div
+                key={task._id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className="card hover:shadow-md transition-shadow cursor-pointer"
+                onClick={() => handleTaskClick(task)}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <h3 className="font-bold text-lg">{task.title}</h3>
+                      <span className={`badge ${getPriorityColor(task.priority)}`}>
+                        {task.priority}
+                      </span>
+                      <span className={`badge ${getStatusColor(task.status)}`}>
+                        {task.status.replace("_", " ")}
+                      </span>
+                    </div>
 
-              const isAssignedToUser = task.assignedTo?.some(
-                (u) => u._id === user._id || u._id === user.id
-              );
-
-              return (
-                <motion.div
-                  key={task._id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                  onClick={() => handleTaskClick(task)}
-                  className={`card hover:shadow-lg ${
-                    isAdmin ? "cursor-pointer" : "cursor-default"
-                  }`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <h3 className="text-lg font-bold">{task.title}</h3>
-
-                      <p className="text-sm text-gray-600">
-                        {task.project?.name}
+                    {task.description && (
+                      <p className="text-sm text-gray-600 mb-3 line-clamp-2">
+                        {task.description}
                       </p>
+                    )}
 
-                      {/* Assignés */}
-                      {task.assignedTo?.length > 0 && (
-                        <div className="flex items-center flex-wrap gap-2 mt-2">
-                          {task.assignedTo.map((u) => (
-                            <span
-                              key={u._id}
-                              className="w-7 h-7 flex items-center justify-center rounded-full bg-purple-100 text-purple-800 text-xs font-semibold"
-                            >
-                              {u.firstName[0]}
-                              {u.lastName[0]}
-                            </span>
-                          ))}
+                    <div className="flex items-center gap-4 text-sm text-gray-500">
+                      {task.project && (
+                        <div className="flex items-center">
+                          <span className="w-2 h-2 rounded-full mr-2" style={{ backgroundColor: task.project.color }} />
+                          {task.project.name}
                         </div>
                       )}
 
-                      {/* Badges */}
-                      <div className="flex gap-2 mt-3">
-                        <span className={`badge ${getStatusColor(task.status)}`}>
-                          {getStatusLabel(task.status)}
-                        </span>
+                      {task.dueDate && (
+                        <div className="flex items-center">
+                          <CalendarIcon className="w-4 h-4 mr-1" />
+                          {format(new Date(task.dueDate), "dd MMM yyyy", { locale: fr })}
+                        </div>
+                      )}
 
-                        <span className={`badge ${getPriorityColor(task.priority)}`}>
-                          {task.priority}
-                        </span>
-
-                        {task.dueDate && (
-                          <span
-                            className={`badge flex items-center ${
-                              isOverdue
-                                ? "bg-red-100 text-red-800"
-                                : "bg-gray-100 text-gray-700"
-                            }`}
-                          >
-                            <CalendarIcon className="w-3 h-3 mr-1" />
-                            {format(new Date(task.dueDate), "dd MMM yyyy", {
-                              locale: fr,
-                            })}
-                            {isOverdue && (
-                              <AlertCircle className="w-3 h-3 ml-1" />
-                            )}
-                          </span>
-                        )}
-                      </div>
+                      {task.assignedTo && task.assignedTo.length > 0 && (
+                        <div className="flex items-center">
+                          {task.assignedTo.slice(0, 3).map((person, index) => (
+                            <span
+                              key={person._id || person || index}
+                              className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-purple-100 text-purple-800 text-xs font-semibold -ml-2 first:ml-0"
+                              title={person.firstName && person.lastName ? `${person.firstName} ${person.lastName}` : ''}
+                            >
+                              {person.firstName ? person.firstName[0] : ''}
+                              {person.lastName ? person.lastName[0] : ''}
+                            </span>
+                          ))}
+                          {task.assignedTo.length > 3 && (
+                            <span className="text-xs ml-1">+{task.assignedTo.length - 3}</span>
+                          )}
+                        </div>
+                      )}
                     </div>
+                  </div>
 
-                    {/* Select statut */}
-                    {(isAdmin || isAssignedToUser) && (
+                  {!isAdmin && (
+                    <div className="ml-4">
                       <select
+                        className="input text-sm"
                         value={task.status}
+                        onChange={(e) => updateTaskStatus(task._id, e.target.value, task)}
                         onClick={(e) => e.stopPropagation()}
-                        onChange={(e) =>
-                          updateTaskStatus(task._id, e.target.value, task)
-                        }
-                        className="text-sm border rounded-lg px-2 py-1"
                       >
                         <option value="not_started">Non démarrée</option>
                         <option value="in_progress">En cours</option>
                         <option value="completed">Terminée</option>
                       </select>
-                    )}
-                  </div>
-                </motion.div>
-              );
-            })}
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            ))}
           </AnimatePresence>
         </div>
       )}
 
-      {showModal && isAdmin && (
+      {/* Task Modal */}
+      {showModal && (
         <TaskModal
           task={selectedTask}
-          projects={projects}
           onClose={() => {
             setShowModal(false);
             setSelectedTask(null);
           }}
-          onSave={handleTaskUpdate}
+          onUpdate={handleTaskUpdate}
         />
       )}
     </div>
