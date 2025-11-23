@@ -6,105 +6,73 @@ const AuthContext = createContext();
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within AuthProvider');
-  }
+  if (!context) throw new Error('useAuth must be used within AuthProvider');
   return context;
 };
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [token, setToken] = useState(localStorage.getItem('token'));
-  const [retryCount, setRetryCount] = useState(0);
+  const [loading, setLoading] = useState(true);
 
+  // Charger l'utilisateur si token existe
   useEffect(() => {
-    if (token) {
-      loadUser();
-    } else {
-      setLoading(false);
-    }
+    if (token) loadUser();
+    else setLoading(false);
   }, [token]);
 
   const loadUser = async () => {
     try {
-      const response = await authAPI.getMe();
-      setUser(response.data.data);
-      setLoading(false);
-    } catch (error) {
-      console.error('Failed to load user:', error);
-      
-      // Ne déconnecter que si le token est vraiment invalide (401)
-      // Pas pour les erreurs de réseau ou serveur
-      if (error.response?.status === 401) {
-        console.log('Token invalide, déconnexion...');
+      const res = await authAPI.getMe();
+      setUser(res.data.data);
+      localStorage.setItem('user', JSON.stringify(res.data.data));
+    } catch (err) {
+      if (err.response?.status === 401) {
         logout();
-      } else {
-        console.log('Erreur temporaire, conservation de la session...');
-        // Essayer de charger l'utilisateur depuis localStorage en backup
-        const savedUser = localStorage.getItem('user');
-        if (savedUser) {
-          try {
-            setUser(JSON.parse(savedUser));
-            
-            // Réessayer la connexion après 3 secondes si c'est un problème réseau
-            if (retryCount < 2) {
-              console.log(`Nouvelle tentative de connexion dans 3s... (${retryCount + 1}/2)`);
-              setTimeout(() => {
-                setRetryCount(retryCount + 1);
-                loadUser();
-              }, 3000);
-            } else {
-              console.log('Nombre maximum de tentatives atteint, utilisation des données en cache');
-              setRetryCount(0);
-            }
-          } catch (e) {
-            console.error('Failed to parse saved user');
-          }
-        }
       }
-      setLoading(false);
     }
+    setLoading(false);
   };
 
+  // Connexion
   const login = async (email, password) => {
     try {
-      const response = await authAPI.login({ email, password });
-      const { user, token } = response.data.data;
-      
+      const res = await authAPI.login({ email, password });
+      const { user, token } = res.data.data;
+
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(user));
-      
+
       setToken(token);
       setUser(user);
-      
-      toast.success(`Bienvenue, ${user.firstName}!`);
+
+      toast.success(`Bienvenue ${user.firstName}!`);
       return true;
-    } catch (error) {
-      toast.error(error.response?.data?.message || 'Erreur de connexion');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Erreur de connexion');
       return false;
     }
   };
 
-  const register = async (userData) => {
+  // Création d'utilisateur (réservé admin)
+  const registerUser = async (data) => {
     try {
-      const response = await authAPI.register(userData);
-      const { user, token } = response.data.data;
-      
-      localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(user));
-      
-      setToken(token);
-      setUser(user);
-      
-      toast.success('Compte créé avec succès!');
+      const res = await authAPI.createUserByAdmin(data);
+      toast.success('Utilisateur créé avec succès');
       return true;
-    } catch (error) {
-      toast.error(error.response?.data?.message || 'Erreur lors de l\'inscription');
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Erreur lors de la création");
       return false;
     }
   };
 
+  // Mise à jour du profil
+  const updateUser = (newUser) => {
+    setUser(newUser);
+    localStorage.setItem('user', JSON.stringify(newUser));
+  };
+
+  // Déconnexion
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
@@ -113,20 +81,21 @@ export const AuthProvider = ({ children }) => {
     toast.info('Déconnecté');
   };
 
-  const updateUser = (updatedUser) => {
-    setUser(updatedUser);
-    localStorage.setItem('user', JSON.stringify(updatedUser));
-  };
-
   const value = {
     user,
+    token,
     loading,
     login,
-    register,
+    registerUser, // admin only
     logout,
     updateUser,
     isAuthenticated: !!user,
+    isAdmin: user?.role === "admin"
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {!loading && children}
+    </AuthContext.Provider>
+  );
 };
