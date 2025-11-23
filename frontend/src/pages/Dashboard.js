@@ -58,7 +58,6 @@ const Dashboard = () => {
       setTeams(teamsRes.data.data || []);
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
-      // Initialiser avec des valeurs par défaut en cas d'erreur
       setStats({
         totalTasks: 0,
         inProgress: 0,
@@ -92,7 +91,6 @@ const Dashboard = () => {
     return colors[status] || colors.not_started;
   };
 
-  // 👇 Redirection vers les tâches filtrées
   const handleRedirect = (filter) => {
     if (filter === 'all') navigate('/tasks');
     else navigate(`/tasks?status=${filter}`);
@@ -102,7 +100,6 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-6">
-
       {/* Welcome */}
       <div className="card bg-gradient-to-r from-primary-600 to-primary-700 text-white">
         <h1 className="text-3xl font-bold mb-2">
@@ -113,7 +110,6 @@ const Dashboard = () => {
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-
         <div onClick={() => handleRedirect('all')} className="card hover:shadow-md cursor-pointer">
           <div className="flex items-center justify-between">
             <div>
@@ -165,8 +161,7 @@ const Dashboard = () => {
 
       {/* Main content */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-        {/* === Tâches récentes === */}
+        {/* Tâches récentes */}
         <div className="card">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-gray-900">Tâches récentes</h2>
@@ -182,13 +177,12 @@ const Dashboard = () => {
             <div className="space-y-3">
               {recentTasks.map((task) => (
                 <div key={task._id} className="p-4 border border-gray-200 rounded-lg hover:border-primary-300 transition-colors">
-
                   <div className="flex items-start justify-between mb-2">
                     <h3 className="font-medium text-gray-900">{task.title}</h3>
                     <span className={`badge ${getPriorityColor(task.priority)}`}>{task.priority}</span>
                   </div>
 
-                  {/* ✅ Personnes assignées */}
+                  {/* Personnes assignées */}
                   {task.assignedTo && task.assignedTo.length > 0 && (
                     <div className="flex items-center gap-2 mb-2">
                       {task.assignedTo.map((person, index) => (
@@ -222,8 +216,9 @@ const Dashboard = () => {
           )}
         </div>
 
-        {/* === Projets actifs === */}
+        {/* Projets actifs et Équipes */}
         <div className="space-y-6">
+          {/* Projets actifs */}
           <div className="card">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold text-gray-900">Projets actifs</h2>
@@ -238,7 +233,6 @@ const Dashboard = () => {
             ) : (
               <div className="space-y-2">
                 {projects.map((project) => {
-                  // Gérer team (ancien) ou teams (nouveau)
                   const projectTeam = project.team || (project.teams && project.teams[0]);
                   
                   return (
@@ -259,7 +253,7 @@ const Dashboard = () => {
             )}
           </div>
 
-          {/* === Équipes === */}
+          {/* Équipes */}
           <div className="card">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold text-gray-900">Mes équipes</h2>
@@ -289,7 +283,6 @@ const Dashboard = () => {
               </div>
             )}
           </div>
-
         </div>
       </div>
     </div>
