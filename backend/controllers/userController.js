@@ -1,4 +1,5 @@
 const User = require("../models/User");
+const bcrypt = require("bcryptjs");
 
 // --------------------------------------------------------
 // @desc    Get all users (ADMIN ONLY)
@@ -23,7 +24,7 @@ exports.getUsers = async (req, res) => {
 };
 
 // --------------------------------------------------------
-// @desc    Get a single user by ID (ADMIN ONLY)
+// @desc    Get a single user (ADMIN ONLY)
 // @route   GET /api/users/:id
 // @access  Private/Admin
 // --------------------------------------------------------
@@ -51,6 +52,61 @@ exports.getUser = async (req, res) => {
 };
 
 // --------------------------------------------------------
+// @desc    Create a new user (ADMIN ONLY)
+// @route   POST /api/users
+// @access  Private/Admin
+// --------------------------------------------------------
+exports.createUser = async (req, res) => {
+  try {
+    const { firstName, lastName, email, password, role } = req.body;
+
+    if (!password || password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "Le mot de passe doit contenir au moins 6 caractères",
+      });
+    }
+
+    const emailExists = await User.findOne({ email });
+    if (emailExists) {
+      return res.status(400).json({
+        success: false,
+        message: "Cet email est déjà utilisé",
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const newUser = await User.create({
+      firstName,
+      lastName,
+      email,
+      password: hashedPassword,
+      role: role || "member",
+      isActive: true,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Utilisateur créé avec succès",
+      data: {
+        _id: newUser._id,
+        firstName: newUser.firstName,
+        lastName: newUser.lastName,
+        email: newUser.email,
+        role: newUser.role,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Erreur lors de la création de l'utilisateur",
+      error: error.message,
+    });
+  }
+};
+
+// --------------------------------------------------------
 // @desc    Update a user (ADMIN ONLY)
 // @route   PUT /api/users/:id
 // @access  Private/Admin
@@ -59,16 +115,9 @@ exports.updateUser = async (req, res) => {
   try {
     const { firstName, lastName, email, role, isActive } = req.body;
 
-    // admin peut changer rôle + désactiver utilisateur
     const updatedUser = await User.findByIdAndUpdate(
       req.params.id,
-      {
-        firstName,
-        lastName,
-        email,
-        role,
-        isActive,
-      },
+      { firstName, lastName, email, role, isActive },
       { new: true }
     ).select("-password");
 
