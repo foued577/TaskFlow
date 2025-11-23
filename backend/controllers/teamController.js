@@ -1,299 +1,152 @@
-const Team = require('../models/Team');
-const User = require('../models/User');
-const History = require('../models/History');
-const Notification = require('../models/Notification');
+const Team = require("../models/Team");
+const User = require("../models/User");
+const asyncHandler = require("../middleware/async");
+const ErrorResponse = require("../utils/errorResponse");
 
-// @desc    Create new team
-// @route   POST /api/teams
-// @access  Private
-exports.createTeam = async (req, res) => {
-  try {
-    const { name, description, color, memberIds } = req.body;
+// -----------------------------------------------------------
+// GET /api/teams - Récupérer toutes les équipes
+// -----------------------------------------------------------
+exports.getTeams = asyncHandler(async (req, res) => {
+  const teams = await Team.find()
+    .populate("members.user", "firstName lastName email")
+    .populate("projects", "name color");
 
-    if (!name) {
-      return res.status(400).json({
-        success: false,
-        message: 'Team name is required'
-      });
-    }
+  res.status(200).json({ success: true, data: teams });
+});
 
-    // Create team with creator as first member
-    const team = await Team.create({
-      name,
-      description,
-      color: color || '#3B82F6',
-      createdBy: req.user.id,
-      members: [{ user: req.user.id }]
-    });
+// -----------------------------------------------------------
+// GET /api/teams/:id - Une équipe
+// -----------------------------------------------------------
+exports.getTeam = asyncHandler(async (req, res, next) => {
+  const team = await Team.findById(req.params.id)
+    .populate("members.user", "firstName lastName email")
+    .populate("projects", "name color");
 
-    // Add additional members if provided
-    if (memberIds && Array.isArray(memberIds)) {
-      for (const memberId of memberIds) {
-        if (memberId !== req.user.id.toString()) {
-          team.members.push({ user: memberId });
-          
-          // Update user's teams
-          await User.findByIdAndUpdate(memberId, {
-            $addToSet: { teams: team._id }
-          });
+  if (!team) return next(new ErrorResponse("Équipe non trouvée", 404));
 
-          // Create notification
-          await Notification.create({
-            recipient: memberId,
-            sender: req.user.id,
-            type: 'team_added',
-            title: 'Added to team',
-            message: `You have been added to team "${name}"`,
-            relatedTeam: team._id
-          });
-        }
-      }
-      await team.save();
-    }
+  res.status(200).json({ success: true, data: team });
+});
 
-    // Update creator's teams
-    await User.findByIdAndUpdate(req.user.id, {
-      $addToSet: { teams: team._id }
-    });
-
-    // Create history entry
-    await History.create({
-      user: req.user.id,
-      action: 'created',
-      entityType: 'team',
-      entityId: team._id,
-      entityName: name
-    });
-
-    const populatedTeam = await Team.findById(team._id)
-      .populate('members.user', 'firstName lastName email avatar')
-      .populate('createdBy', 'firstName lastName');
-
-    res.status(201).json({
-      success: true,
-      data: populatedTeam
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error creating team',
-      error: error.message
-    });
+// -----------------------------------------------------------
+// POST /api/teams - Créer une équipe (ADMIN ONLY)
+// -----------------------------------------------------------
+exports.createTeam = asyncHandler(async (req, res, next) => {
+  if (req.user.role !== "admin") {
+    return next(
+      new ErrorResponse("Seul un administrateur peut créer une équipe", 403)
+    );
   }
-};
 
-// @desc    Get all user's teams
-// @route   GET /api/teams
-// @access  Private
-exports.getTeams = async (req, res) => {
-  try {
-    const teams = await Team.find({
-      'members.user': req.user.id,
-      isActive: true
-    })
-    .populate('members.user', 'firstName lastName email avatar')
-    .populate('createdBy', 'firstName lastName')
-    .sort('-createdAt');
+  const { name, description, color } = req.body;
 
-    res.status(200).json({
-      success: true,
-      count: teams.length,
-      data: teams
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching teams',
-      error: error.message
-    });
+  const team = await Team.create({
+    name,
+    description,
+    color,
+    createdBy: req.user.id,
+    members: [
+      {
+        user: req.user.id,
+        role: "admin",
+      },
+    ],
+  });
+
+  res.status(201).json({ success: true, data: team });
+});
+
+// -----------------------------------------------------------
+// PUT /api/teams/:id - Modifier une équipe (Admin global ou Admin d'équipe)
+// -----------------------------------------------------------
+exports.updateTeam = asyncHandler(async (req, res, next) => {
+  let team = await Team.findById(req.params.id);
+
+  if (!team) return next(new ErrorResponse("Équipe non trouvée", 404));
+
+  const isTeamAdmin = team.isTeamAdmin(req.user.id);
+  const isGlobalAdmin = req.user.role === "admin";
+
+  if (!isTeamAdmin && !isGlobalAdmin) {
+    return next(
+      new ErrorResponse("Vous n’avez pas les droits pour modifier cette équipe", 403)
+    );
   }
-};
 
-// @desc    Get single team
-// @route   GET /api/teams/:id
-// @access  Private
-exports.getTeam = async (req, res) => {
-  try {
-    const team = await Team.findById(req.params.id)
-      .populate('members.user', 'firstName lastName email avatar bio phone')
-      .populate('createdBy', 'firstName lastName');
+  const fieldsToUpdate = {
+    name: req.body.name,
+    description: req.body.description,
+    color: req.body.color,
+  };
 
-    if (!team) {
-      return res.status(404).json({
-        success: false,
-        message: 'Team not found'
-      });
-    }
+  team = await Team.findByIdAndUpdate(req.params.id, fieldsToUpdate, {
+    new: true,
+    runValidators: true,
+  });
 
-    // Check if user is member
-    const isMember = team.members.some(m => m.user._id.toString() === req.user.id);
-    if (!isMember) {
-      return res.status(403).json({
-        success: false,
-        message: 'Not authorized to access this team'
-      });
-    }
+  res.status(200).json({ success: true, data: team });
+});
 
-    res.status(200).json({
-      success: true,
-      data: team
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching team',
-      error: error.message
-    });
+// -----------------------------------------------------------
+// POST /api/teams/:id/members - Ajouter un membre
+// -----------------------------------------------------------
+exports.addMember = asyncHandler(async (req, res, next) => {
+  const team = await Team.findById(req.params.id);
+
+  if (!team) return next(new ErrorResponse("Équipe non trouvée", 404));
+
+  const isTeamAdmin = team.isTeamAdmin(req.user.id);
+  const isGlobalAdmin = req.user.role === "admin";
+
+  if (!isTeamAdmin && !isGlobalAdmin) {
+    return next(
+      new ErrorResponse("Vous n’avez pas les droits pour ajouter un membre", 403)
+    );
   }
-};
 
-// @desc    Update team
-// @route   PUT /api/teams/:id
-// @access  Private
-exports.updateTeam = async (req, res) => {
-  try {
-    const { name, description, color } = req.body;
+  const { userId } = req.body;
 
-    const team = await Team.findById(req.params.id);
+  const userExists = await User.findById(userId);
+  if (!userExists) return next(new ErrorResponse("Utilisateur introuvable", 404));
 
-    if (!team) {
-      return res.status(404).json({
-        success: false,
-        message: 'Team not found'
-      });
-    }
+  const alreadyMember = team.members.some((m) => m.user.toString() === userId);
+  if (alreadyMember)
+    return next(
+      new ErrorResponse("Cet utilisateur est déjà membre de l'équipe", 400)
+    );
 
-    // Check if user is member
-    const isMember = team.members.some(m => m.user.toString() === req.user.id);
-    if (!isMember) {
-      return res.status(403).json({
-        success: false,
-        message: 'Not authorized'
-      });
-    }
+  team.members.push({
+    user: userId,
+    role: "member",
+  });
 
-    if (name) team.name = name;
-    if (description !== undefined) team.description = description;
-    if (color) team.color = color;
+  await team.save();
 
-    await team.save();
+  res.status(200).json({ success: true, data: team });
+});
 
-    // Create history entry
-    await History.create({
-      user: req.user.id,
-      action: 'updated',
-      entityType: 'team',
-      entityId: team._id,
-      entityName: team.name
-    });
+// -----------------------------------------------------------
+// DELETE /api/teams/:teamId/members/:userId - Retirer un membre
+// -----------------------------------------------------------
+exports.removeMember = asyncHandler(async (req, res, next) => {
+  const { teamId, userId } = req.params;
 
-    const updatedTeam = await Team.findById(team._id)
-      .populate('members.user', 'firstName lastName email avatar')
-      .populate('createdBy', 'firstName lastName');
+  const team = await Team.findById(teamId);
+  if (!team) return next(new ErrorResponse("Équipe non trouvée", 404));
 
-    res.status(200).json({
-      success: true,
-      data: updatedTeam
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error updating team',
-      error: error.message
-    });
+  const isTeamAdmin = team.isTeamAdmin(req.user.id);
+  const isGlobalAdmin = req.user.role === "admin";
+
+  if (!isTeamAdmin && !isGlobalAdmin) {
+    return next(
+      new ErrorResponse("Vous n’avez pas les droits pour retirer un membre", 403)
+    );
   }
-};
 
-// @desc    Add member to team
-// @route   POST /api/teams/:id/members
-// @access  Private
-exports.addMember = async (req, res) => {
-  try {
-    const { userId } = req.body;
+  team.members = team.members.filter(
+    (m) => m.user.toString() !== userId.toString()
+  );
 
-    const team = await Team.findById(req.params.id);
+  await team.save();
 
-    if (!team) {
-      return res.status(404).json({
-        success: false,
-        message: 'Team not found'
-      });
-    }
-
-    // Check if user already a member
-    const alreadyMember = team.members.some(m => m.user.toString() === userId);
-    if (alreadyMember) {
-      return res.status(400).json({
-        success: false,
-        message: 'User is already a member'
-      });
-    }
-
-    team.members.push({ user: userId });
-    await team.save();
-
-    // Update user's teams
-    await User.findByIdAndUpdate(userId, {
-      $addToSet: { teams: team._id }
-    });
-
-    // Create notification
-    await Notification.create({
-      recipient: userId,
-      sender: req.user.id,
-      type: 'team_added',
-      title: 'Added to team',
-      message: `You have been added to team "${team.name}"`,
-      relatedTeam: team._id
-    });
-
-    const updatedTeam = await Team.findById(team._id)
-      .populate('members.user', 'firstName lastName email avatar');
-
-    res.status(200).json({
-      success: true,
-      data: updatedTeam
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error adding member',
-      error: error.message
-    });
-  }
-};
-
-// @desc    Remove member from team
-// @route   DELETE /api/teams/:id/members/:userId
-// @access  Private
-exports.removeMember = async (req, res) => {
-  try {
-    const team = await Team.findById(req.params.id);
-
-    if (!team) {
-      return res.status(404).json({
-        success: false,
-        message: 'Team not found'
-      });
-    }
-
-    team.members = team.members.filter(m => m.user.toString() !== req.params.userId);
-    await team.save();
-
-    // Update user's teams
-    await User.findByIdAndUpdate(req.params.userId, {
-      $pull: { teams: team._id }
-    });
-
-    res.status(200).json({
-      success: true,
-      message: 'Member removed successfully'
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error removing member',
-      error: error.message
-    });
-  }
-};
+  res.status(200).json({ success: true, data: team });
+});
