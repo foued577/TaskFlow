@@ -22,14 +22,18 @@ const Calendar = () => {
 
   const loadData = async () => {
     try {
+      setLoading(true);
       const [tasksRes, projectsRes] = await Promise.all([
         tasksAPI.getAll(),
         projectsAPI.getAll(),
       ]);
-      setTasks(tasksRes.data.data);
-      setProjects(projectsRes.data.data);
+      setTasks(tasksRes.data.data || []);
+      setProjects(projectsRes.data.data || []);
     } catch (error) {
-      toast.error('Erreur lors du chargement');
+      console.error('Erreur lors du chargement:', error);
+      toast.error(error.response?.data?.message || 'Erreur lors du chargement');
+      setTasks([]);
+      setProjects([]);
     } finally {
       setLoading(false);
     }
@@ -70,6 +74,7 @@ const Calendar = () => {
           <button
             onClick={() => {
               setSelectedTask(null);
+              setSelectedDate(new Date());
               setShowModal(true);
             }}
             className="btn btn-primary flex items-center ml-4"
@@ -83,59 +88,55 @@ const Calendar = () => {
   };
 
   const renderDays = () => {
-    const days = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
-    
-    return (
-      <div className="grid grid-cols-7 gap-px bg-gray-300 border border-gray-300 rounded-t-lg overflow-hidden">
-        {days.map((day) => (
-          <div key={day} className="bg-gray-50 p-3 text-center font-semibold text-gray-700">
-            {day}
-          </div>
-        ))}
-      </div>
-    );
+    const days = [];
+    const dateFormat = 'EEE';
+    const startDate = startOfWeek(currentMonth, { weekStartsOn: 1 });
+
+    for (let i = 0; i < 7; i++) {
+      days.push(
+        <div key={i} className="text-center font-medium text-gray-700 py-2">
+          {format(addDays(startDate, i), dateFormat, { locale: fr })}
+        </div>
+      );
+    }
+
+    return <div className="grid grid-cols-7 gap-1 mb-2">{days}</div>;
   };
 
   const renderCells = () => {
     const monthStart = startOfMonth(currentMonth);
-    const monthEnd = endOfMonth(monthStart);
+    const monthEnd = endOfMonth(currentMonth);
     const startDate = startOfWeek(monthStart, { weekStartsOn: 1 });
     const endDate = endOfWeek(monthEnd, { weekStartsOn: 1 });
 
     const rows = [];
     let days = [];
     let day = startDate;
+    let formattedDate = '';
 
     while (day <= endDate) {
       for (let i = 0; i < 7; i++) {
+        formattedDate = format(day, 'd');
         const cloneDay = day;
-        const dayTasks = getTasksForDate(day);
-        const isToday = isSameDay(day, new Date());
+        const dayTasks = getTasksForDate(cloneDay);
         const isCurrentMonth = isSameMonth(day, monthStart);
+        const isToday = isSameDay(day, new Date());
 
         days.push(
           <div
             key={day.toString()}
-            onClick={() => setSelectedDate(cloneDay)}
-            className={`bg-white min-h-[120px] p-2 cursor-pointer hover:bg-gray-50 transition-colors ${
-              !isCurrentMonth ? 'bg-gray-100' : ''
+            className={`min-h-[100px] border border-gray-200 p-2 ${
+              !isCurrentMonth ? 'bg-gray-50' : 'bg-white'
             } ${isToday ? 'ring-2 ring-primary-500' : ''}`}
+            onClick={() => {
+              setSelectedDate(cloneDay);
+              setSelectedTask(null);
+              setShowModal(true);
+            }}
           >
-            <div className="flex items-center justify-between mb-2">
-              <span
-                className={`text-sm font-semibold ${
-                  !isCurrentMonth ? 'text-gray-400' : 'text-gray-900'
-                } ${isToday ? 'bg-primary-600 text-white rounded-full w-6 h-6 flex items-center justify-center' : ''}`}
-              >
-                {format(day, 'd')}
-              </span>
-              {dayTasks.length > 0 && (
-                <span className="text-xs bg-primary-100 text-primary-800 px-2 py-0.5 rounded-full">
-                  {dayTasks.length}
-                </span>
-              )}
+            <div className={`text-sm font-medium mb-1 ${isToday ? 'text-primary-600' : 'text-gray-900'}`}>
+              {formattedDate}
             </div>
-            
             <div className="space-y-1">
               {dayTasks.slice(0, 3).map((task) => (
                 <div
@@ -145,19 +146,14 @@ const Calendar = () => {
                     setSelectedTask(task);
                     setShowModal(true);
                   }}
-                  className="text-xs p-1 rounded truncate cursor-pointer hover:shadow-sm transition-shadow"
-                  style={{
-                    backgroundColor: task.project?.color + '20',
-                    borderLeft: `3px solid ${task.project?.color || '#3B82F6'}`,
-                  }}
+                  className="text-xs p-1 rounded bg-blue-100 text-blue-800 cursor-pointer hover:bg-blue-200 truncate"
+                  style={{ backgroundColor: task.project?.color || '#3B82F6', color: 'white' }}
                 >
                   {task.title}
                 </div>
               ))}
               {dayTasks.length > 3 && (
-                <div className="text-xs text-gray-500 pl-1">
-                  +{dayTasks.length - 3} autres
-                </div>
+                <div className="text-xs text-gray-500">+{dayTasks.length - 3} autres</div>
               )}
             </div>
           </div>
@@ -165,14 +161,14 @@ const Calendar = () => {
         day = addDays(day, 1);
       }
       rows.push(
-        <div key={day.toString()} className="grid grid-cols-7 gap-px bg-gray-300">
+        <div key={day.toString()} className="grid grid-cols-7 gap-1">
           {days}
         </div>
       );
       days = [];
     }
 
-    return <div className="border border-gray-300 rounded-b-lg overflow-hidden">{rows}</div>;
+    return <div className="space-y-1">{rows}</div>;
   };
 
   if (loading) return <Loading fullScreen={false} />;
@@ -180,8 +176,7 @@ const Calendar = () => {
   return (
     <div>
       {renderHeader()}
-      
-      <div className="card p-0 overflow-hidden">
+      <div className="card">
         {renderDays()}
         {renderCells()}
       </div>
@@ -190,82 +185,14 @@ const Calendar = () => {
       {showModal && (
         <TaskModal
           task={selectedTask}
-          projects={projects}
+          initialDate={selectedDate}
           onClose={() => {
             setShowModal(false);
             setSelectedTask(null);
+            setSelectedDate(null);
           }}
-          onSave={() => {
-            setShowModal(false);
-            setSelectedTask(null);
-            loadData();
-          }}
+          onUpdate={loadData}
         />
-      )}
-
-      {/* Date Detail Modal */}
-      {selectedDate && !showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-2xl w-full p-6 max-h-[80vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold">
-                {format(selectedDate, 'EEEE d MMMM yyyy', { locale: fr })}
-              </h2>
-              <button
-                onClick={() => setSelectedDate(null)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              {getTasksForDate(selectedDate).length === 0 ? (
-                <p className="text-center text-gray-500 py-8">Aucune tâche ce jour</p>
-              ) : (
-                getTasksForDate(selectedDate).map((task) => (
-                  <div
-                    key={task._id}
-                    onClick={() => {
-                      setSelectedDate(null);
-                      setSelectedTask(task);
-                      setShowModal(true);
-                    }}
-                    className="p-4 border border-gray-200 rounded-lg hover:border-primary-300 cursor-pointer transition-colors"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-gray-900 mb-1">{task.title}</h3>
-                        <p className="text-sm text-gray-600 mb-2">{task.project?.name}</p>
-                        {task.description && (
-                          <p className="text-sm text-gray-500 line-clamp-2">{task.description}</p>
-                        )}
-                      </div>
-                      <span
-                        className={`badge ${
-                          task.status === 'completed'
-                            ? 'bg-green-100 text-green-800'
-                            : task.status === 'in_progress'
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-gray-100 text-gray-800'
-                        }`}
-                      >
-                        {task.status.replace('_', ' ')}
-                      </span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            <button
-              onClick={() => setSelectedDate(null)}
-              className="w-full mt-6 btn btn-secondary"
-            >
-              Fermer
-            </button>
-          </div>
-        </div>
       )}
     </div>
   );
