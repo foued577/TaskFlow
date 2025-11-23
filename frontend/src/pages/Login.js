@@ -15,9 +15,7 @@ const Login = () => {
     setLoading(true);
 
     const success = await login(email, password);
-    if (success) {
-      navigate('/');
-    }
+    if (success) navigate('/');
 
     setLoading(false);
   };
@@ -32,6 +30,7 @@ const Login = () => {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Email */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Email
@@ -43,12 +42,13 @@ const Login = () => {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="input pl-10"
-                  placeholder="votre@email.com"
+                  placeholder="exemple@mail.com"
                   required
                 />
               </div>
             </div>
 
+            {/* Mot de passe */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Mot de passe
@@ -66,6 +66,7 @@ const Login = () => {
               </div>
             </div>
 
+            {/* Bouton */}
             <button
               type="submit"
               disabled={loading}
@@ -87,12 +88,14 @@ const Login = () => {
 
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-600">
-              Pas encore de compte ?{' '}
-              <Link to="/register" className="font-medium text-primary-600 hover:text-primary-700">
-                Créer un compte
-              </Link>
+              Vous n’avez pas de compte ? 
+              <br />
+              <span className="text-xs text-gray-500">
+                (Un administrateur doit vous créer un compte)
+              </span>
             </p>
           </div>
+
         </div>
       </div>
     </div>
