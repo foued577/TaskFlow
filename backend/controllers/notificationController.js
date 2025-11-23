@@ -1,112 +1,141 @@
-const Notification = require("../models/Notification");
+const Notification = require('../models/Notification');
 
-// GET USER NOTIFICATIONS
+// @desc    Get user notifications
+// @route   GET /api/notifications
+// @access  Private
 exports.getNotifications = async (req, res) => {
   try {
-    const limit = parseInt(req.query.limit) || 20;
+    const { isRead, limit = 50 } = req.query;
 
-    // Le modèle utilise 'user' comme champ
-    const notifications = await Notification.find({ user: req.user.id })
-      .populate("user", "firstName lastName email")
-      .sort({ createdAt: -1 })
-      .limit(limit);
+    let query = { recipient: req.user.id };
+
+    if (isRead !== undefined) {
+      query.isRead = isRead === 'true';
+    }
+
+    const notifications = await Notification.find(query)
+      .populate('sender', 'firstName lastName avatar')
+      .populate('relatedTask', 'title')
+      .populate('relatedProject', 'name')
+      .populate('relatedTeam', 'name')
+      .sort('-createdAt')
+      .limit(parseInt(limit));
 
     const unreadCount = await Notification.countDocuments({
-      user: req.user.id,
-      isRead: false,
+      recipient: req.user.id,
+      isRead: false
     });
 
     res.status(200).json({
       success: true,
+      count: notifications.length,
       unreadCount,
-      data: notifications,
+      data: notifications
     });
   } catch (error) {
-    console.error("Erreur lors du chargement des notifications:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Erreur serveur",
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching notifications',
+      error: error.message
     });
   }
 };
 
-// MARK AS READ
+// @desc    Mark notification as read
+// @route   PUT /api/notifications/:id/read
+// @access  Private
 exports.markAsRead = async (req, res) => {
   try {
     const notification = await Notification.findById(req.params.id);
+
     if (!notification) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "Notification introuvable" 
+      return res.status(404).json({
+        success: false,
+        message: 'Notification not found'
       });
     }
 
-    // Vérifier que la notification appartient à l'utilisateur
-    if (notification.user.toString() !== req.user.id) {
-      return res.status(403).json({ 
-        success: false, 
-        message: "Accès refusé" 
+    // Check if user is recipient
+    if (notification.recipient.toString() !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized'
       });
     }
 
-    await Notification.findByIdAndUpdate(req.params.id, { isRead: true });
-    res.status(200).json({ success: true });
+    notification.isRead = true;
+    notification.readAt = new Date();
+    await notification.save();
+
+    res.status(200).json({
+      success: true,
+      data: notification
+    });
   } catch (error) {
-    console.error("Erreur lors de la mise à jour de la notification:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Erreur serveur",
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    res.status(500).json({
+      success: false,
+      message: 'Error marking notification as read',
+      error: error.message
     });
   }
 };
 
-// MARK ALL AS READ
+// @desc    Mark all notifications as read
+// @route   PUT /api/notifications/read-all
+// @access  Private
 exports.markAllAsRead = async (req, res) => {
   try {
     await Notification.updateMany(
-      { user: req.user.id },
-      { isRead: true }
+      { recipient: req.user.id, isRead: false },
+      { isRead: true, readAt: new Date() }
     );
-    res.status(200).json({ success: true });
+
+    res.status(200).json({
+      success: true,
+      message: 'All notifications marked as read'
+    });
   } catch (error) {
-    console.error("Erreur lors de la mise à jour des notifications:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Erreur serveur",
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    res.status(500).json({
+      success: false,
+      message: 'Error marking notifications as read',
+      error: error.message
     });
   }
 };
 
-// DELETE NOTIFICATION
+// @desc    Delete notification
+// @route   DELETE /api/notifications/:id
+// @access  Private
 exports.deleteNotification = async (req, res) => {
   try {
     const notification = await Notification.findById(req.params.id);
+
     if (!notification) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "Notification introuvable" 
+      return res.status(404).json({
+        success: false,
+        message: 'Notification not found'
       });
     }
 
-    // Vérifier que la notification appartient à l'utilisateur
-    if (notification.user.toString() !== req.user.id) {
-      return res.status(403).json({ 
-        success: false, 
-        message: "Accès refusé" 
+    // Check if user is recipient
+    if (notification.recipient.toString() !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized'
       });
     }
 
-    await Notification.findByIdAndDelete(req.params.id);
-    res.status(200).json({ success: true });
+    await notification.deleteOne();
+
+    res.status(200).json({
+      success: true,
+      message: 'Notification deleted successfully'
+    });
   } catch (error) {
-    console.error("Erreur lors de la suppression de la notification:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Erreur serveur",
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    res.status(500).json({
+      success: false,
+      message: 'Error deleting notification',
+      error: error.message
     });
   }
 };
