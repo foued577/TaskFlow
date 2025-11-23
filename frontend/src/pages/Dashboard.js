@@ -43,30 +43,19 @@ const Dashboard = () => {
         tasksAPI.getOverdue(),
       ]);
 
-      const tasks = tasksRes.data.data || [];
-      const overdueTasks = overdueRes.data.data || [];
-      
+      const tasks = tasksRes.data.data;
       setStats({
         totalTasks: tasks.length,
         inProgress: tasks.filter((t) => t.status === 'in_progress').length,
         completed: tasks.filter((t) => t.status === 'completed').length,
-        overdue: overdueRes.data.count || overdueTasks.length,
+        overdue: overdueRes.data.count,
       });
 
       setRecentTasks(tasks.slice(0, 5));
-      setProjects((projectsRes.data.data || []).slice(0, 4));
-      setTeams(teamsRes.data.data || []);
+      setProjects(projectsRes.data.data.slice(0, 4));
+      setTeams(teamsRes.data.data);
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
-      setStats({
-        totalTasks: 0,
-        inProgress: 0,
-        completed: 0,
-        overdue: 0,
-      });
-      setRecentTasks([]);
-      setProjects([]);
-      setTeams([]);
     } finally {
       setLoading(false);
     }
@@ -91,6 +80,7 @@ const Dashboard = () => {
     return colors[status] || colors.not_started;
   };
 
+  // 👇 Redirection vers les tâches filtrées
   const handleRedirect = (filter) => {
     if (filter === 'all') navigate('/tasks');
     else navigate(`/tasks?status=${filter}`);
@@ -100,6 +90,7 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-6">
+
       {/* Welcome */}
       <div className="card bg-gradient-to-r from-primary-600 to-primary-700 text-white">
         <h1 className="text-3xl font-bold mb-2">
@@ -110,6 +101,7 @@ const Dashboard = () => {
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+
         <div onClick={() => handleRedirect('all')} className="card hover:shadow-md cursor-pointer">
           <div className="flex items-center justify-between">
             <div>
@@ -161,7 +153,8 @@ const Dashboard = () => {
 
       {/* Main content */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Tâches récentes */}
+
+        {/* === Tâches récentes === */}
         <div className="card">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-gray-900">Tâches récentes</h2>
@@ -177,22 +170,23 @@ const Dashboard = () => {
             <div className="space-y-3">
               {recentTasks.map((task) => (
                 <div key={task._id} className="p-4 border border-gray-200 rounded-lg hover:border-primary-300 transition-colors">
+
                   <div className="flex items-start justify-between mb-2">
                     <h3 className="font-medium text-gray-900">{task.title}</h3>
                     <span className={`badge ${getPriorityColor(task.priority)}`}>{task.priority}</span>
                   </div>
 
-                  {/* Personnes assignées */}
+                  {/* ✅ Personnes assignées */}
                   {task.assignedTo && task.assignedTo.length > 0 && (
                     <div className="flex items-center gap-2 mb-2">
-                      {task.assignedTo.map((person, index) => (
+                      {task.assignedTo.map((person) => (
                         <span
-                          key={person._id || person || index}
+                          key={person._id}
                           className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-purple-100 text-purple-800 text-xs font-semibold"
-                          title={person.firstName && person.lastName ? `${person.firstName} ${person.lastName}` : ''}
+                          title={`${person.firstName} ${person.lastName}`}
                         >
-                          {person.firstName ? person.firstName.charAt(0).toUpperCase() : ''}
-                          {person.lastName ? person.lastName.charAt(0).toUpperCase() : ''}
+                          {person.firstName.charAt(0).toUpperCase()}
+                          {person.lastName.charAt(0).toUpperCase()}
                         </span>
                       ))}
                     </div>
@@ -200,7 +194,7 @@ const Dashboard = () => {
 
                   <div className="flex items-center justify-between text-sm">
                     <span className={`badge ${getStatusColor(task.status)}`}>
-                      {task.status ? task.status.replace('_', ' ') : 'not_started'}
+                      {task.status.replace('_', ' ')}
                     </span>
 
                     {task.dueDate && (
@@ -216,9 +210,8 @@ const Dashboard = () => {
           )}
         </div>
 
-        {/* Projets actifs et Équipes */}
+        {/* === Projets actifs === */}
         <div className="space-y-6">
-          {/* Projets actifs */}
           <div className="card">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold text-gray-900">Projets actifs</h2>
@@ -232,28 +225,20 @@ const Dashboard = () => {
               </div>
             ) : (
               <div className="space-y-2">
-                {projects.map((project) => {
-                  const projectTeam = project.team || (project.teams && project.teams[0]);
-                  
-                  return (
-                    <div key={project._id} className="flex items-center p-3 border border-gray-200 rounded-lg">
-                      <div className="w-3 h-3 rounded-full mr-3" style={{ backgroundColor: project.color || '#10B981' }} />
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-900">{project.name}</p>
-                        {projectTeam && (
-                          <p className="text-xs text-gray-500">
-                            {projectTeam.name || (typeof projectTeam === 'string' ? projectTeam : '')}
-                          </p>
-                        )}
-                      </div>
+                {projects.map((project) => (
+                  <div key={project._id} className="flex items-center p-3 border border-gray-200 rounded-lg">
+                    <div className="w-3 h-3 rounded-full mr-3" style={{ backgroundColor: project.color }} />
+                    <div className="flex-1">
+                      <p className="font-medium text-gray-900">{project.name}</p>
+                      <p className="text-xs text-gray-500">{project.team?.name}</p>
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
               </div>
             )}
           </div>
 
-          {/* Équipes */}
+          {/* === Équipes === */}
           <div className="card">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold text-gray-900">Mes équipes</h2>
@@ -269,13 +254,13 @@ const Dashboard = () => {
               <div className="space-y-2">
                 {teams.slice(0, 4).map((team) => (
                   <div key={team._id} className="flex items-center p-3 border border-gray-200 rounded-lg">
-                    <div className="w-10 h-10 rounded-lg flex items-center justify-center text-white font-semibold mr-3" style={{ backgroundColor: team.color || '#3B82F6' }}>
-                      {team.name ? team.name.charAt(0) : 'T'}
+                    <div className="w-10 h-10 rounded-lg flex items-center justify-center text-white font-semibold mr-3" style={{ backgroundColor: team.color }}>
+                      {team.name.charAt(0)}
                     </div>
                     <div>
                       <p className="font-medium text-gray-900">{team.name}</p>
                       <p className="text-xs text-gray-500">
-                        {team.members ? team.members.length : 0} membre{(team.members ? team.members.length : 0) > 1 ? 's' : ''}
+                        {team.members.length} membre{team.members.length > 1 ? 's' : ''}
                       </p>
                     </div>
                   </div>
@@ -283,6 +268,7 @@ const Dashboard = () => {
               </div>
             )}
           </div>
+
         </div>
       </div>
     </div>
