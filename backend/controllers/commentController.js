@@ -33,49 +33,60 @@ exports.createComment = async (req, res) => {
     });
 
     // Create history entry
-    await History.create({
-      user: req.user.id,
-      action: 'commented',
-      entityType: 'task',
-      entityId: taskId,
-      entityName: task.title,
-      project: task.project
-    });
+    try {
+      await History.create({
+        user: req.user.id,
+        action: 'commented',
+        entityType: 'task',
+        entityId: taskId,
+        entityName: task.title,
+        project: task.project || null
+      });
+    } catch (historyError) {
+      console.error("Erreur lors de la création de l'historique:", historyError);
+      // Ne pas faire échouer la requête si l'historique échoue
+    }
 
-    // Notify task assignees
-    for (const userId of task.assignedTo) {
-      if (userId.toString() !== req.user.id) {
-        await Notification.create({
-          recipient: userId,
-          sender: req.user.id,
-          type: 'comment_added',
-          title: 'New comment',
-          message: `${req.user.firstName} commented on task "${task.title}"`,
-          relatedTask: taskId,
-          relatedProject: task.project
-        });
+    // Notify task assignees - s'assurer que assignedTo existe et est un tableau
+    if (task.assignedTo && Array.isArray(task.assignedTo) && task.assignedTo.length > 0) {
+      for (const userId of task.assignedTo) {
+        if (userId && userId.toString() !== req.user.id) {
+          try {
+            await Notification.create({
+              user: userId,
+              type: 'comment_added',
+              title: 'New comment',
+              message: `${req.user.firstName} commented on task "${task.title}"`
+            });
+          } catch (notifError) {
+            console.error("Erreur lors de la création de la notification:", notifError);
+            // Ne pas faire échouer la requête si la notification échoue
+          }
+        }
       }
     }
 
     // Notify mentioned users
-    if (mentions && mentions.length > 0) {
+    if (mentions && Array.isArray(mentions) && mentions.length > 0) {
       for (const userId of mentions) {
-        if (userId !== req.user.id) {
-          await Notification.create({
-            recipient: userId,
-            sender: req.user.id,
-            type: 'mention',
-            title: 'You were mentioned',
-            message: `${req.user.firstName} mentioned you in a comment on task "${task.title}"`,
-            relatedTask: taskId,
-            relatedProject: task.project
-          });
+        if (userId && userId.toString() !== req.user.id) {
+          try {
+            await Notification.create({
+              user: userId,
+              type: 'mention',
+              title: 'You were mentioned',
+              message: `${req.user.firstName} mentioned you in a comment on task "${task.title}"`
+            });
+          } catch (notifError) {
+            console.error("Erreur lors de la création de la notification:", notifError);
+            // Ne pas faire échouer la requête si la notification échoue
+          }
         }
       }
     }
 
     const populatedComment = await Comment.findById(comment._id)
-      .populate('user', 'firstName lastName email avatar')
+      .populate('user', 'firstName lastName email')
       .populate('mentions', 'firstName lastName');
 
     res.status(201).json({
@@ -83,21 +94,25 @@ exports.createComment = async (req, res) => {
       data: populatedComment
     });
   } catch (error) {
+    console.error("Erreur lors de la création du commentaire:", error);
     res.status(500).json({
       success: false,
       message: 'Error creating comment',
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
 
 // @desc    Get comments for task
-// @route   GET /api/comments/task/:taskId
+// @route   GET /api/comments/:taskId ou GET /api/comments/task/:taskId
 // @access  Private
 exports.getComments = async (req, res) => {
   try {
-    const comments = await Comment.find({ task: req.params.taskId })
-      .populate('user', 'firstName lastName email avatar')
+    // Gérer les deux formats : /comments/:taskId et /comments/task/:taskId
+    const taskId = req.params.taskId || req.params.id;
+    
+    const comments = await Comment.find({ task: taskId })
+      .populate('user', 'firstName lastName email')
       .populate('mentions', 'firstName lastName')
       .sort('createdAt');
 
@@ -107,10 +122,11 @@ exports.getComments = async (req, res) => {
       data: comments
     });
   } catch (error) {
+    console.error("Erreur lors du chargement des commentaires:", error);
     res.status(500).json({
       success: false,
       message: 'Error fetching comments',
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -144,17 +160,18 @@ exports.updateComment = async (req, res) => {
     await comment.save();
 
     const updatedComment = await Comment.findById(comment._id)
-      .populate('user', 'firstName lastName email avatar');
+      .populate('user', 'firstName lastName email');
 
     res.status(200).json({
       success: true,
       data: updatedComment
     });
   } catch (error) {
+    console.error("Erreur lors de la mise à jour du commentaire:", error);
     res.status(500).json({
       success: false,
       message: 'Error updating comment',
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -188,10 +205,11 @@ exports.deleteComment = async (req, res) => {
       message: 'Comment deleted successfully'
     });
   } catch (error) {
+    console.error("Erreur lors de la suppression du commentaire:", error);
     res.status(500).json({
       success: false,
       message: 'Error deleting comment',
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
