@@ -11,6 +11,33 @@ API.interceptors.request.use((config) => {
   return config;
 });
 
+// Intercepteur de réponse pour gérer les erreurs
+API.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response) {
+      console.error("Erreur API:", {
+        status: error.response.status,
+        data: error.response.data,
+        url: error.config?.url
+      });
+      
+      // Si erreur 401, rediriger vers login
+      if (error.response.status === 401) {
+        localStorage.removeItem("token");
+        if (window.location.pathname !== "/login") {
+          window.location.href = "/login";
+        }
+      }
+    } else if (error.request) {
+      console.error("Pas de réponse du serveur:", error.request);
+    } else {
+      console.error("Erreur de configuration:", error.message);
+    }
+    return Promise.reject(error);
+  }
+);
+
 /* ----------------------------------------------------
    🔹 AUTH
 -----------------------------------------------------*/
@@ -18,6 +45,7 @@ export const authAPI = {
   login: (data) => API.post("/auth/login", data),
   register: (data) => API.post("/auth/register", data),
   getMe: () => API.get("/auth/me"),
+  updateProfile: (data) => API.put("/auth/update-profile", data),
 };
 
 /* ----------------------------------------------------
@@ -40,10 +68,8 @@ export const teamsAPI = {
   getOne: (id) => API.get(`/teams/${id}`),
   create: (data) => API.post("/teams", data),
   update: (id, data) => API.put(`/teams/${id}`, data),
-
   addMember: (teamId, userId) =>
     API.post(`/teams/${teamId}/members`, { userId }),
-
   removeMember: (teamId, userId) =>
     API.delete(`/teams/${teamId}/members/${userId}`),
 };
@@ -68,21 +94,18 @@ export const tasksAPI = {
   create: (data) => API.post("/tasks", data),
   update: (id, data) => API.put(`/tasks/${id}`, data),
   delete: (id) => API.delete(`/tasks/${id}`),
-
   addSubtask: (id, data) => API.post(`/tasks/${id}/subtasks`, data),
   toggleSubtask: (id, subId) =>
     API.put(`/tasks/${id}/subtasks/${subId}`),
-
   uploadAttachment: (id, file) =>
     API.post(`/tasks/${id}/attachments`, file, {
       headers: { "Content-Type": "multipart/form-data" },
     }),
-
   getOverdue: () => API.get("/tasks/overdue"),
 };
 
 /* ----------------------------------------------------
-   🔹 NOTIFICATIONS (déjà corrigé)
+   🔹 NOTIFICATIONS
 -----------------------------------------------------*/
 export const notificationsAPI = {
   getAll: () => API.get("/notifications"),
@@ -92,18 +115,21 @@ export const notificationsAPI = {
 };
 
 /* ----------------------------------------------------
-   🔹 COMMENTS (manquait → causait erreur)
+   🔹 COMMENTS
 -----------------------------------------------------*/
 export const commentsAPI = {
   getTaskComments: (taskId) => API.get(`/comments/${taskId}`),
-  addComment: (taskId, data) => API.post(`/comments/${taskId}`, data),
-  deleteComment: (taskId, commentId) =>
-    API.delete(`/comments/${taskId}/${commentId}`),
+  addComment: (taskId, data) => API.post("/comments", { taskId, ...data }),
+  updateComment: (id, data) => API.put(`/comments/${id}`, data),
+  deleteComment: (id) => API.delete(`/comments/${id}`),
 };
 
 /* ----------------------------------------------------
-   🔹 HISTORY (manquait → causait erreur)
+   🔹 HISTORY
 -----------------------------------------------------*/
 export const historyAPI = {
-  getAll: () => API.get("/history"),
+  getAll: () => API.get("/history/user"),
+  getProjectHistory: (projectId) => API.get(`/history/project/${projectId}`),
+  getEntityHistory: (entityType, entityId) => 
+    API.get(`/history/${entityType}/${entityId}`),
 };
