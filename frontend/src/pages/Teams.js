@@ -50,13 +50,12 @@ const Teams = () => {
                           "Erreur lors du chargement des équipes";
       toast.error(errorMessage);
       
-      // Si erreur d'authentification, rediriger vers login
       if (error.response?.status === 401) {
         localStorage.removeItem("token");
         window.location.href = "/login";
       }
       
-      setTeams([]); // Initialiser avec un tableau vide
+      setTeams([]);
     } finally {
       setLoading(false);
     }
