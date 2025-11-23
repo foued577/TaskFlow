@@ -40,6 +40,29 @@ exports.getTasks = async (req, res) => {
       const taskObj = task.toObject();
       return {
         ...taskObj,
+        assignedTo: taskObj.assignedTo || []
+      };
+    });
+
+    res.status(200).json({ success: true, data: safeTasks });
+  } catch (error) {
+    console.error("Erreur lors du chargement des tâches:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Erreur serveur",
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+        .populate("project", "name color team teams")
+        .populate("assignedTo", "firstName lastName email");
+    }
+
+    // S'assurer que assignedTo est toujours un tableau
+    const safeTasks = tasks.map(task => {
+      const taskObj = task.toObject();
+      return {
+        ...taskObj,
         assignedTo: taskObj.assignedTo || [],
         subtasks: taskObj.subtasks || []
       };
