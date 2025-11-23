@@ -1,46 +1,41 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
-const teamSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: [true, 'Team name is required'],
-    trim: true
-  },
-  description: {
-    type: String,
-    default: '',
-    maxlength: 1000
-  },
-  members: [{
-    user: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      required: true
+const teamSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: [true, "Le nom de l'équipe est obligatoire"],
+      trim: true,
     },
-    joinedAt: {
-      type: Date,
-      default: Date.now
-    }
-  }],
-  createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
+
+    description: {
+      type: String,
+      default: "",
+    },
+
+    color: {
+      type: String,
+      default: "#3B82F6", // bleu par défaut
+    },
+
+    members: [
+      {
+        user: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          required: true,
+        },
+        role: {
+          type: String,
+          enum: ["admin", "member"],
+          default: "member",
+        },
+      },
+    ],
   },
-  color: {
-    type: String,
-    default: '#3B82F6'
-  },
-  isActive: {
-    type: Boolean,
-    default: true
+  {
+    timestamps: true,
   }
-}, {
-  timestamps: true
-});
+);
 
-// Index for efficient queries
-teamSchema.index({ 'members.user': 1 });
-teamSchema.index({ createdBy: 1 });
-
-module.exports = mongoose.model('Team', teamSchema);
+module.exports = mongoose.model("Team", teamSchema);
