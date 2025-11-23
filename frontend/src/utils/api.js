@@ -1,82 +1,72 @@
 import axios from "axios";
 
-const API_URL = "http://localhost:5000/api";
-
-// Création instance Axios qui ajoute automatiquement le token
-const api = axios.create({
-  baseURL: API_URL,
+const API = axios.create({
+  baseURL: process.env.REACT_APP_API_URL || "http://localhost:5000/api",
 });
 
-// Intercepteur → Ajoute token à chaque requête
-api.interceptors.request.use((config) => {
+// Ajouter automatiquement le token
+API.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
-// ======================
-// AUTH
-// ======================
+// ------------------ AUTH ------------------
 export const authAPI = {
-  login: (data) => api.post("/auth/login", data),
-  getMe: () => api.get("/auth/me"),
-
-  // RESERVE ADMIN → créer un utilisateur
-  createUserByAdmin: (data) => api.post("/auth/register", data),
+  login: (data) => API.post("/auth/login", data),
+  register: (data) => API.post("/auth/register", data),
+  getMe: () => API.get("/auth/me"),
 };
 
-// ======================
-// USERS
-// ======================
+// ------------------ USERS ------------------
 export const usersAPI = {
-  search: (query, teamId = "") =>
-    api.get("/users/search", { params: { q: query, teamId } }),
-
-  getById: (id) => api.get(`/users/${id}`),
+  getAll: () => API.get("/users"),
+  getOne: (id) => API.get(`/users/${id}`),
+  create: (data) => API.post("/users", data),
+  update: (id, data) => API.put(`/users/${id}`, data),
+  delete: (id) => API.delete(`/users/${id}`),
 };
 
-// ======================
-// TEAMS
-// ======================
+// ------------------ TEAMS ------------------
 export const teamsAPI = {
-  getAll: () => api.get("/teams"),
-  create: (data) => api.post("/teams", data),
-  update: (id, data) => api.put(`/teams/${id}`, data),
-  addMember: (teamId, userId) =>
-    api.post(`/teams/${teamId}/members`, { userId }),
-  removeMember: (teamId, userId) =>
-    api.delete(`/teams/${teamId}/members/${userId}`),
+  getAll: () => API.get("/teams"),
+  getOne: (id) => API.get(`/teams/${id}`),
+  create: (data) => API.post("/teams", data),
+  update: (id, data) => API.put(`/teams/${id}`, data),
+  addMember: (id, data) => API.post(`/teams/${id}/members`, data),
+  removeMember: (teamId, userId) => API.delete(`/teams/${teamId}/members/${userId}`),
 };
 
-// ======================
-// PROJECTS
-// ======================
+// ------------------ PROJECTS ------------------
 export const projectsAPI = {
-  getAll: () => api.get("/projects"),
-  create: (data) => api.post("/projects", data),
-  update: (id, data) => api.put(`/projects/${id}`, data),
-  delete: (id) => api.delete(`/projects/${id}`),
+  getAll: () => API.get("/projects"),
+  getOne: (id) => API.get(`/projects/${id}`),
+  create: (data) => API.post("/projects", data),
+  update: (id, data) => API.put(`/projects/${id}`, data),
+  delete: (id) => API.delete(`/projects/${id}`),
 };
 
-// ======================
-// TASKS
-// ======================
+// ------------------ TASKS ------------------
 export const tasksAPI = {
-  getAll: (filters = {}) => api.get("/tasks", { params: filters }),
-  getOverdue: () => api.get("/tasks/overdue"),
-  create: (data) => api.post("/tasks", data),
-  update: (id, data) => api.put(`/tasks/${id}`, data),
-  delete: (id) => api.delete(`/tasks/${id}`),
+  getAll: () => API.get("/tasks"),
+  getOne: (id) => API.get(`/tasks/${id}`),
+  create: (data) => API.post("/tasks", data),
+  update: (id, data) => API.put(`/tasks/${id}`, data),
+  delete: (id) => API.delete(`/tasks/${id}`),
+  addSubtask: (id, data) => API.post(`/tasks/${id}/subtasks`, data),
+  toggleSubtask: (id, subtaskId) =>
+    API.put(`/tasks/${id}/subtasks/${subtaskId}`),
+  uploadAttachment: (id, data) =>
+    API.post(`/tasks/${id}/attachments`, data, {
+      headers: { "Content-Type": "multipart/form-data" },
+    }),
+  getOverdue: () => API.get("/tasks/overdue"),
 };
 
-// ======================
-// EXPORTS (Excel)
-// ======================
-export const exportAPI = {
-  tasks: () => api.get("/export/tasks", { responseType: "blob" }),
-  projects: () => api.get("/export/projects", { responseType: "blob" }),
-  statistics: () => api.get("/export/statistics", { responseType: "blob" }),
-  teamReport: (teamId) =>
-    api.get(`/export/team/${teamId}`, { responseType: "blob" }),
-  history: () => api.get("/export/history", { responseType: "blob" }),
+// ------------------ NOTIFICATIONS (AJOUT COMPLET) ------------------
+export const notificationsAPI = {
+  getAll: (params) => API.get("/notifications", { params }),
+  markAsRead: (id) => API.put(`/notifications/${id}/read`),
+  markAllAsRead: () => API.put("/notifications/read-all"),
+  delete: (id) => API.delete(`/notifications/${id}`),
 };
