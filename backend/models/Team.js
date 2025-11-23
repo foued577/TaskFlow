@@ -15,9 +15,10 @@ const teamSchema = new mongoose.Schema(
 
     color: {
       type: String,
-      default: "#3B82F6", // bleu par défaut
+      default: "#3B82F6",
     },
 
+    // Membres de l'équipe
     members: [
       {
         user: {
