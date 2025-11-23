@@ -1,141 +1,48 @@
-const Notification = require('../models/Notification');
+const Notification = require("../models/Notification");
 
-// @desc    Get user notifications
-// @route   GET /api/notifications
-// @access  Private
+// GET USER NOTIFICATIONS
 exports.getNotifications = async (req, res) => {
   try {
-    const { isRead, limit = 50 } = req.query;
+    const limit = parseInt(req.query.limit) || 20;
 
-    let query = { recipient: req.user.id };
-
-    if (isRead !== undefined) {
-      query.isRead = isRead === 'true';
-    }
-
-    const notifications = await Notification.find(query)
-      .populate('sender', 'firstName lastName avatar')
-      .populate('relatedTask', 'title')
-      .populate('relatedProject', 'name')
-      .populate('relatedTeam', 'name')
-      .sort('-createdAt')
-      .limit(parseInt(limit));
+    const notifications = await Notification.find({ user: req.user.id })
+      .sort({ createdAt: -1 })
+      .limit(limit);
 
     const unreadCount = await Notification.countDocuments({
-      recipient: req.user.id,
-      isRead: false
+      user: req.user.id,
+      isRead: false,
     });
 
     res.status(200).json({
       success: true,
-      count: notifications.length,
       unreadCount,
-      data: notifications
+      data: notifications,
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching notifications',
-      error: error.message
-    });
+    res.status(500).json({ success: false, message: "Erreur serveur" });
   }
 };
 
-// @desc    Mark notification as read
-// @route   PUT /api/notifications/:id/read
-// @access  Private
+// MARK AS READ
 exports.markAsRead = async (req, res) => {
-  try {
-    const notification = await Notification.findById(req.params.id);
+  await Notification.findByIdAndUpdate(req.params.id, { isRead: true });
 
-    if (!notification) {
-      return res.status(404).json({
-        success: false,
-        message: 'Notification not found'
-      });
-    }
-
-    // Check if user is recipient
-    if (notification.recipient.toString() !== req.user.id) {
-      return res.status(403).json({
-        success: false,
-        message: 'Not authorized'
-      });
-    }
-
-    notification.isRead = true;
-    notification.readAt = new Date();
-    await notification.save();
-
-    res.status(200).json({
-      success: true,
-      data: notification
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error marking notification as read',
-      error: error.message
-    });
-  }
+  res.status(200).json({ success: true });
 };
 
-// @desc    Mark all notifications as read
-// @route   PUT /api/notifications/read-all
-// @access  Private
+// MARK ALL AS READ
 exports.markAllAsRead = async (req, res) => {
-  try {
-    await Notification.updateMany(
-      { recipient: req.user.id, isRead: false },
-      { isRead: true, readAt: new Date() }
-    );
+  await Notification.updateMany(
+    { user: req.user.id },
+    { isRead: true }
+  );
 
-    res.status(200).json({
-      success: true,
-      message: 'All notifications marked as read'
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error marking notifications as read',
-      error: error.message
-    });
-  }
+  res.status(200).json({ success: true });
 };
 
-// @desc    Delete notification
-// @route   DELETE /api/notifications/:id
-// @access  Private
+// DELETE NOTIFICATION
 exports.deleteNotification = async (req, res) => {
-  try {
-    const notification = await Notification.findById(req.params.id);
-
-    if (!notification) {
-      return res.status(404).json({
-        success: false,
-        message: 'Notification not found'
-      });
-    }
-
-    // Check if user is recipient
-    if (notification.recipient.toString() !== req.user.id) {
-      return res.status(403).json({
-        success: false,
-        message: 'Not authorized'
-      });
-    }
-
-    await notification.deleteOne();
-
-    res.status(200).json({
-      success: true,
-      message: 'Notification deleted successfully'
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error deleting notification',
-      error: error.message
-    });
-  }
+  await Notification.findByIdAndDelete(req.params.id);
+  res.status(200).json({ success: true });
 };
