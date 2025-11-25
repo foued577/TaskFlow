@@ -26,24 +26,32 @@ const Teams = () => {
     description: '',
     color: '#3B82F6',
   });
+
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [showAddMember, setShowAddMember] = useState(false);
 
+  // ID utilisateur cohérent
   const currentUserId = user?.id || user?._id;
+
+  // ADMIN GLOBAL = admin OU aucun role (anciens utilisateurs)
   const isGlobalAdmin = !user?.role || user.role === 'admin';
 
+  // Vérifier admin d'équipe
   const isTeamAdmin = (team) => {
     if (isGlobalAdmin) return true;
     if (!team || !currentUserId) return false;
 
     const member = team.members?.find(
       (m) =>
-        m.user._id === currentUserId ||
-        m.user._id === currentUserId?.toString()
+        m.user?._id === currentUserId ||
+        m.user === currentUserId ||
+        m.user?._id === currentUserId?.toString()
     );
 
     if (!member) return false;
+
+    // admin équipe OU données anciennes (pas de role)
     return member.role === 'admin' || typeof member.role === 'undefined';
   };
 
@@ -53,8 +61,8 @@ const Teams = () => {
 
   const loadTeams = async () => {
     try {
-      const response = await teamsAPI.getAll();
-      setTeams(response.data.data);
+      const res = await teamsAPI.getAll();
+      setTeams(res.data.data);
     } catch (error) {
       toast.error('Erreur lors du chargement des équipes');
     } finally {
@@ -66,7 +74,7 @@ const Teams = () => {
     e.preventDefault();
 
     if (!isGlobalAdmin) {
-      toast.error('Vous n’avez pas les droits pour modifier les équipes');
+      toast.error("Vous n’avez pas les droits pour modifier les équipes");
       return;
     }
 
@@ -82,15 +90,13 @@ const Teams = () => {
       setFormData({ name: '', description: '', color: '#3B82F6' });
       loadTeams();
     } catch (error) {
-      toast.error(
-        error.response?.data?.message || 'Une erreur est survenue'
-      );
+      toast.error(error.response?.data?.message || 'Une erreur est survenue');
     }
   };
 
   const openCreateModal = () => {
     if (!isGlobalAdmin) {
-      toast.error('Vous n’avez pas les droits pour créer une équipe');
+      toast.error("Vous n’avez pas les droits pour créer une équipe");
       return;
     }
     setModalMode('create');
@@ -100,7 +106,7 @@ const Teams = () => {
 
   const openEditModal = (team) => {
     if (!isTeamAdmin(team)) {
-      toast.error('Vous n’avez pas les droits pour modifier cette équipe');
+      toast.error("Vous n’avez pas les droits pour modifier cette équipe");
       return;
     }
     setModalMode('edit');
@@ -122,13 +128,13 @@ const Teams = () => {
       const response = await usersAPI.search(query, selectedTeam?._id);
       setSearchResults(response.data.data);
     } catch (error) {
-      console.error('Search error:', error);
+      console.log('Search error:', error);
     }
   };
 
   const addMember = async (userId) => {
     if (!isTeamAdmin(selectedTeam)) {
-      toast.error('Vous n’avez pas les droits pour ajouter un membre');
+      toast.error("Vous n’avez pas les droits pour ajouter un membre");
       return;
     }
     try {
@@ -144,12 +150,11 @@ const Teams = () => {
 
   const removeMember = async (teamId, userId, team) => {
     if (!isTeamAdmin(team)) {
-      toast.error('Vous n’avez pas les droits pour retirer un membre');
+      toast.error("Vous n’avez pas les droits pour retirer un membre");
       return;
     }
-    if (
-      window.confirm('Voulez-vous vraiment retirer ce membre ?')
-    ) {
+
+    if (window.confirm('Voulez-vous vraiment retirer ce membre ?')) {
       try {
         await teamsAPI.removeMember(teamId, userId);
         toast.success('Membre retiré');
@@ -164,34 +169,27 @@ const Teams = () => {
 
   return (
     <div>
+      {/* HEADER */}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Mes équipes</h1>
 
         {isGlobalAdmin && (
-          <button
-            onClick={openCreateModal}
-            className="btn btn-primary flex items-center"
-          >
+          <button onClick={openCreateModal} className="btn btn-primary flex items-center">
             <Plus className="w-5 h-5 mr-2" />
             Nouvelle équipe
           </button>
         )}
       </div>
 
+      {/* LISTE DES EQUIPES */}
       {teams.length === 0 ? (
         <div className="card text-center py-12">
           <Users className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">
-            Aucune équipe
-          </h3>
-          <p className="text-gray-600 mb-4">
-            Commencez par créer votre première équipe
-          </p>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Aucune équipe</h3>
+          <p className="text-gray-600 mb-4">Commencez par créer votre première équipe</p>
+
           {isGlobalAdmin && (
-            <button
-              onClick={openCreateModal}
-              className="btn btn-primary"
-            >
+            <button onClick={openCreateModal} className="btn btn-primary">
               Créer une équipe
             </button>
           )}
@@ -200,11 +198,11 @@ const Teams = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {teams.map((team) => {
             const userIsTeamAdmin = isTeamAdmin(team);
+
             return (
-              <div
-                key={team._id}
-                className="card hover:shadow-lg transition-shadow"
-              >
+              <div key={team._id} className="card hover:shadow-lg transition-shadow">
+
+                {/* HEADER DE CARTE */}
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center">
                     <div
@@ -213,13 +211,11 @@ const Teams = () => {
                     >
                       {team.name.charAt(0)}
                     </div>
+
                     <div>
-                      <h3 className="text-lg font-bold text-gray-900">
-                        {team.name}
-                      </h3>
+                      <h3 className="text-lg font-bold text-gray-900">{team.name}</h3>
                       <p className="text-sm text-gray-500">
-                        {team.members.length} membre
-                        {team.members.length > 1 ? 's' : ''}
+                        {team.members.length} membre{team.members.length > 1 ? 's' : ''}
                       </p>
                     </div>
                   </div>
@@ -234,17 +230,12 @@ const Teams = () => {
                   )}
                 </div>
 
-                {team.description && (
-                  <p className="text-sm text-gray-600 mb-4">
-                    {team.description}
-                  </p>
-                )}
+                {team.description && <p className="text-sm text-gray-600 mb-4">{team.description}</p>}
 
+                {/* MEMBRES */}
                 <div className="border-t border-gray-200 pt-4">
                   <div className="flex items-center justify-between mb-3">
-                    <p className="text-sm font-medium text-gray-700">
-                      Membres
-                    </p>
+                    <p className="text-sm font-medium text-gray-700">Membres</p>
 
                     {userIsTeamAdmin && (
                       <button
@@ -261,11 +252,8 @@ const Teams = () => {
                   </div>
 
                   <div className="space-y-2 max-h-40 overflow-y-auto">
-                    {team.members.slice(0, 5).map((member) => (
-                      <div
-                        key={member.user._id}
-                        className="flex items-center justify-between"
-                      >
+                    {team.members.map((member) => (
+                      <div key={member.user._id} className="flex items-center justify-between">
                         <div className="flex items-center">
                           <div className="w-8 h-8 rounded-full bg-primary-600 flex items-center justify-center text-white text-xs font-semibold mr-2">
                             {member.user.firstName?.charAt(0)}
@@ -273,27 +261,19 @@ const Teams = () => {
                           </div>
                           <div>
                             <p className="text-sm font-medium text-gray-900">
-                              {member.user.firstName}{' '}
-                              {member.user.lastName}
+                              {member.user.firstName} {member.user.lastName}
                             </p>
-                            {member.role && (
-                              <p className="text-xs text-gray-500">
-                                {member.role === 'admin'
-                                  ? 'Admin'
-                                  : 'Membre'}
-                              </p>
-                            )}
+
+                            <p className="text-xs text-gray-500">
+                              {member.role === 'admin' ? 'Admin équipe' : 'Membre'}
+                            </p>
                           </div>
                         </div>
 
                         {userIsTeamAdmin && (
                           <button
                             onClick={() =>
-                              removeMember(
-                                team._id,
-                                member.user._id,
-                                team
-                              )
+                              removeMember(team._id, member.user._id, team)
                             }
                             className="p-1 text-red-600 hover:bg-red-50 rounded"
                           >
@@ -310,89 +290,61 @@ const Teams = () => {
         </div>
       )}
 
-      {/* Create/Edit Modal */}
+      {/* MODAL CREATE / EDIT */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg max-w-md w-full p-6">
+
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold">
-                {modalMode === 'create'
-                  ? 'Nouvelle équipe'
-                  : "Modifier l'équipe"}
+                {modalMode === 'create' ? 'Nouvelle équipe' : "Modifier l'équipe"}
               </h2>
-              <button
-                onClick={() => setShowModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
+
+              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
                 <X className="w-6 h-6" />
               </button>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
+              {/* NOM */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Nom de l'équipe
-                </label>
+                <label className="block text-sm font-medium mb-2">Nom</label>
                 <input
                   type="text"
                   value={formData.name}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      name: e.target.value,
-                    })
-                  }
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="input"
                   required
-                  disabled={!isGlobalAdmin}
                 />
               </div>
 
+              {/* DESCRIPTION */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Description
-                </label>
+                <label className="block text-sm font-medium mb-2">Description</label>
                 <textarea
                   value={formData.description}
                   onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      description: e.target.value,
-                    })
+                    setFormData({ ...formData, description: e.target.value })
                   }
                   className="input"
                   rows={3}
-                  disabled={!isGlobalAdmin}
                 />
               </div>
 
+              {/* COULEUR */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Couleur
-                </label>
+                <label className="block text-sm font-medium mb-2">Couleur</label>
                 <input
                   type="color"
                   value={formData.color}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      color: e.target.value,
-                    })
-                  }
-                  className="w-full h-10 rounded-lg border border-gray-300 cursor-pointer"
-                  disabled={!isGlobalAdmin}
+                  onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+                  className="w-full h-10 rounded border"
                 />
               </div>
 
-              <div className="flex space-x-3 pt-4">
-                <button
-                  type="submit"
-                  disabled={!isGlobalAdmin}
-                  className="flex-1 btn btn-primary disabled:opacity-60"
-                >
-                  {modalMode === 'create'
-                    ? 'Créer'
-                    : 'Mettre à jour'}
+              <div className="flex space-x-3 pt-3">
+                <button type="submit" className="flex-1 btn btn-primary">
+                  {modalMode === 'create' ? 'Créer' : 'Sauvegarder'}
                 </button>
                 <button
                   type="button"
@@ -407,12 +359,14 @@ const Teams = () => {
         </div>
       )}
 
-      {/* Add Member Modal */}
+      {/* MODAL AJOUT MEMBRE */}
       {showAddMember && selectedTeam && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg max-w-md w-full p-6">
+
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold">Ajouter un membre</h2>
+
               <button
                 onClick={() => {
                   setShowAddMember(false);
@@ -425,15 +379,14 @@ const Teams = () => {
               </button>
             </div>
 
+            {/* PERMISSION */}
             {!isTeamAdmin(selectedTeam) ? (
-              <p className="text-sm text-gray-500">
-                Vous n’avez pas les droits pour ajouter des membres à
-                cette équipe.
-              </p>
+              <p className="text-sm text-gray-500">Accès refusé</p>
             ) : (
               <>
                 <div className="relative mb-4">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+
                   <input
                     type="text"
                     value={searchQuery}
@@ -442,7 +395,7 @@ const Teams = () => {
                       searchUsers(e.target.value);
                     }}
                     className="input pl-10"
-                    placeholder="Rechercher un utilisateur..."
+                    placeholder="Rechercher..."
                   />
                 </div>
 
@@ -450,22 +403,19 @@ const Teams = () => {
                   {searchResults.map((u) => (
                     <div
                       key={u._id}
-                      className="flex items-center justify-between p-3 border border-gray-200 rounded-lg"
+                      className="flex items-center justify-between p-3 border rounded"
                     >
                       <div className="flex items-center">
-                        <div className="w-10 h-10 rounded-full bg-primary-600 flex items-center justify-center text-white font-semibold mr-3">
-                          {u.firstName?.charAt(0)}
-                          {u.lastName?.charAt(0)}
+                        <div className="w-10 h-10 rounded-full bg-primary-600 text-white flex items-center justify-center font-semibold mr-3">
+                          {u.firstName.charAt(0)}
+                          {u.lastName.charAt(0)}
                         </div>
                         <div>
-                          <p className="font-medium text-gray-900">
-                            {u.firstName} {u.lastName}
-                          </p>
-                          <p className="text-sm text-gray-500">
-                            {u.email}
-                          </p>
+                          <p className="font-medium">{u.firstName} {u.lastName}</p>
+                          <p className="text-xs text-gray-500">{u.email}</p>
                         </div>
                       </div>
+
                       <button
                         onClick={() => addMember(u._id)}
                         className="btn btn-primary text-sm"
