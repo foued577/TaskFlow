@@ -1,66 +1,186 @@
-const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const { generateToken } = require('../middleware/auth');
 
-// ===============================
-// PROTECT MIDDLEWARE
-// ===============================
-exports.protect = async (req, res, next) => {
-  let token;
-
-  // Récupération depuis Authorization: Bearer xxx
-  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-    token = req.headers.authorization.split(' ')[1];
-  }
-
-  if (!token) {
-    return res.status(401).json({
-      success: false,
-      message: 'Not authorized - No token'
-    });
-  }
-
+// ======================================================
+// REGISTER
+// ======================================================
+exports.register = async (req, res) => {
   try {
-    // Vérification du token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const { firstName, lastName, email, password } = req.body;
 
-    // Récupération user
-    const user = await User.findById(decoded.id);
-
-    if (!user) {
-      return res.status(401).json({
+    if (!firstName || !lastName || !email || !password) {
+      return res.status(400).json({
         success: false,
-        message: 'User not found'
+        message: 'Please provide all required fields'
       });
     }
 
-    // Normalisation du rôle :
-    // Tous les anciens comptes SANS role = ADMIN
-    const userRole = user.role || 'admin';
+    // Check existing user
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: 'User with this email already exists'
+      });
+    }
 
-    req.user = {
-      id: user._id,
-      role: userRole
-    };
+    // NEW USER → always member by default
+    const user = await User.create({
+      firstName,
+      lastName,
+      email,
+      password,
+      role: 'member'
+    });
 
-    next();
+    const token = generateToken(user._id);
+
+    res.status(201).json({
+      success: true,
+      data: {
+        user: {
+          id: user._id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          avatar: user.avatar,
+          role: user.role
+        },
+        token
+      }
+    });
   } catch (error) {
-    return res.status(401).json({
+    res.status(500).json({
       success: false,
-      message: 'Not authorized - Invalid token'
+      message: 'Error creating user',
+      error: error.message
     });
   }
 };
 
 
-// ===============================
-// ADMIN ONLY MIDDLEWARE
-// ===============================
-exports.adminOnly = (req, res, next) => {
-  if (!req.user || req.user.role !== 'admin') {
-    return res.status(403).json({
+// ======================================================
+// LOGIN
+// ======================================================
+exports.login = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide email and password'
+      });
+    }
+
+    const user = await User.findOne({ email }).select('+password');
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid credentials'
+      });
+    }
+
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid credentials'
+      });
+    }
+
+    // Update last login
+    user.lastLogin = new Date();
+    await user.save();
+
+    const token = generateToken(user._id);
+
+    // Normalize role (old users → admin)
+    const safeRole = user.role || 'admin';
+
+    res.status(200).json({
+      success: true,
+      data: {
+        user: {
+          id: user._id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          avatar: user.avatar,
+          bio: user.bio,
+          phone: user.phone,
+          role: safeRole
+        },
+        token
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
       success: false,
-      message: 'Access denied - admin only'
+      message: 'Error logging in',
+      error: error.message
     });
   }
-  next();
+};
+
+
+// ======================================================
+// GET ME
+// ======================================================
+exports.getMe = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).populate('teams', 'name color');
+
+    const safeRole = user.role || 'admin';
+
+    res.status(200).json({
+      success: true,
+      data: {
+        ...user.toJSON(),
+        role: safeRole
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error getting user',
+      error: error.message
+    });
+  }
+};
+
+
+// ======================================================
+// UPDATE PROFILE
+// ======================================================
+exports.updateProfile = async (req, res) => {
+  try {
+    const { firstName, lastName, bio, phone } = req.body;
+
+    const user = await User.findById(req.user.id);
+
+    if (firstName) user.firstName = firstName;
+    if (lastName) user.lastName = lastName;
+    if (bio !== undefined) user.bio = bio;
+    if (phone !== undefined) user.phone = phone;
+
+    await user.save();
+
+    const safeRole = user.role || 'admin';
+
+    res.status(200).json({
+      success: true,
+      data: {
+        ...user.toJSON(),
+        role: safeRole
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error updating profile',
+      error: error.message
+    });
+  }
 };
