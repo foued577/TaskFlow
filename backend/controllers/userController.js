@@ -1,63 +1,66 @@
 const User = require('../models/User');
 const Team = require('../models/Team');
 
-// @desc    Search users
+// =============================================
+// @desc    Search users (filtered)
 // @route   GET /api/users/search
 // @access  Private
+// =============================================
 exports.searchUsers = async (req, res) => {
   try {
     const { q, teamId } = req.query;
 
     if (!q || q.length < 2) {
-      return res.status(400).json({
-        success: false,
-        message: 'Search query must be at least 2 characters'
+      return res.status(200).json({
+        success: true,
+        data: []
       });
     }
 
-    let query = {
+    // Build search filter
+    const searchFilter = {
       $or: [
         { firstName: { $regex: q, $options: 'i' } },
         { lastName: { $regex: q, $options: 'i' } },
         { email: { $regex: q, $options: 'i' } }
-      ],
-      isActive: true
+      ]
     };
 
-    // Exclude users already in team if teamId provided
+    // Exclude users already in the team (Teams.js requires this)
     if (teamId) {
-      const team = await Team.findById(teamId);
+      const team = await Team.findById(teamId).select('members.user');
+
       if (team) {
-        const memberIds = team.members.map(m => m.user.toString());
-        query._id = { $nin: memberIds };
+        const existingMembers = team.members.map((m) => m.user.toString());
+        searchFilter._id = { $nin: existingMembers };
       }
     }
 
-    const users = await User.find(query)
-      .select('firstName lastName email avatar')
-      .limit(20);
+    const users = await User.find(searchFilter)
+      .select('firstName lastName email avatar role');
 
     res.status(200).json({
       success: true,
-      count: users.length,
       data: users
     });
+
   } catch (error) {
+    console.error('Search error:', error);
     res.status(500).json({
       success: false,
-      message: 'Error searching users',
-      error: error.message
+      message: 'Error searching users'
     });
   }
 };
 
-// @desc    Get user by ID
+// =============================================
+// @desc    Get single user by ID
 // @route   GET /api/users/:id
 // @access  Private
+// =============================================
 exports.getUser = async (req, res) => {
   try {
     const user = await User.findById(req.params.id)
-      .select('-password')
       .populate('teams', 'name color');
 
     if (!user) {
@@ -71,11 +74,12 @@ exports.getUser = async (req, res) => {
       success: true,
       data: user
     });
+
   } catch (error) {
+    console.error('Get user error:', error);
     res.status(500).json({
       success: false,
-      message: 'Error fetching user',
-      error: error.message
+      message: 'Error getting user'
     });
   }
 };
