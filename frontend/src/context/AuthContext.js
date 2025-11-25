@@ -1,132 +1,139 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
-import { authAPI } from '../utils/api';
-import { toast } from 'react-toastify';
+import React, { createContext, useContext, useEffect, useState } from "react";
+import { authAPI } from "../utils/api";
 
 const AuthContext = createContext();
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within AuthProvider');
-  }
-  return context;
-};
-
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [token, setToken] = useState(localStorage.getItem('token'));
-  const [retryCount, setRetryCount] = useState(0);
-
-  useEffect(() => {
-    if (token) {
-      loadUser();
-    } else {
-      setLoading(false);
-    }
-  }, [token]);
-
-  const loadUser = async () => {
+  const [user, setUser] = useState(() => {
+    const stored = localStorage.getItem("user");
     try {
-      const response = await authAPI.getMe();
-      setUser(response.data.data);
-      setLoading(false);
-    } catch (error) {
-      console.error('Failed to load user:', error);
-      
-      // Ne déconnecter que si le token est vraiment invalide (401)
-      // Pas pour les erreurs de réseau ou serveur
-      if (error.response?.status === 401) {
-        console.log('Token invalide, déconnexion...');
-        logout();
-      } else {
-        console.log('Erreur temporaire, conservation de la session...');
-        // Essayer de charger l'utilisateur depuis localStorage en backup
-        const savedUser = localStorage.getItem('user');
-        if (savedUser) {
-          try {
-            setUser(JSON.parse(savedUser));
-            
-            // Réessayer la connexion après 3 secondes si c'est un problème réseau
-            if (retryCount < 2) {
-              console.log(`Nouvelle tentative de connexion dans 3s... (${retryCount + 1}/2)`);
-              setTimeout(() => {
-                setRetryCount(retryCount + 1);
-                loadUser();
-              }, 3000);
-            } else {
-              console.log('Nombre maximum de tentatives atteint, utilisation des données en cache');
-              setRetryCount(0);
-            }
-          } catch (e) {
-            console.error('Failed to parse saved user');
-          }
-        }
-      }
-      setLoading(false);
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
     }
-  };
+  });
 
+  const [loading, setLoading] = useState(true);
+
+  // -------------------------------
+  // 🔄 Charger l'utilisateur via /auth/me
+  // -------------------------------
+  useEffect(() => {
+    const loadUser = async () => {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const res = await authAPI.getMe();
+        let fetchedUser = res.data.data;
+
+        // Si l'utilisateur n'a pas de rôle → admin par défaut
+        if (!fetchedUser.role) {
+          fetchedUser.role = "admin";
+        }
+
+        setUser(fetchedUser);
+        localStorage.setItem("user", JSON.stringify(fetchedUser));
+      } catch (err) {
+        console.error("Auth load error:", err);
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+      }
+
+      setLoading(false);
+    };
+
+    loadUser();
+  }, []);
+
+  // -------------------------------
+  // 🟢 Login
+  // -------------------------------
   const login = async (email, password) => {
     try {
-      const response = await authAPI.login({ email, password });
-      const { user, token } = response.data.data;
-      
-      localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(user));
-      
-      setToken(token);
-      setUser(user);
-      
-      toast.success(`Bienvenue, ${user.firstName}!`);
+      const res = await authAPI.login({ email, password });
+
+      const token = res.data.data.token;
+      let loggedUser = res.data.data.user;
+
+      localStorage.setItem("token", token);
+
+      // Rôle correct
+      loggedUser.role = loggedUser.role || "admin";
+
+      setUser(loggedUser);
+      localStorage.setItem("user", JSON.stringify(loggedUser));
+
       return true;
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Erreur de connexion');
+      console.error("Login failed:", error);
       return false;
     }
   };
 
-  const register = async (userData) => {
+  // -------------------------------
+  // 🟢 Register
+  // -------------------------------
+  const register = async (data) => {
     try {
-      const response = await authAPI.register(userData);
-      const { user, token } = response.data.data;
-      
-      localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(user));
-      
-      setToken(token);
-      setUser(user);
-      
-      toast.success('Compte créé avec succès!');
+      const res = await authAPI.register(data);
+
+      const token = res.data.data.token;
+      let newUser = res.data.data.user;
+
+      localStorage.setItem("token", token);
+
+      // Nouvelle inscription → MEMBER
+      newUser.role = "member";
+
+      setUser(newUser);
+      localStorage.setItem("user", JSON.stringify(newUser));
+
       return true;
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Erreur lors de l\'inscription');
+      console.error("Register failed:", error);
       return false;
     }
   };
 
+  // -------------------------------
+  // 🟢 Logout
+  // -------------------------------
   const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    setToken(null);
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
     setUser(null);
-    toast.info('Déconnecté');
+    window.location.href = "/login";
   };
 
+  // -------------------------------
+  // 🟢 Mise à jour du profil
+  // -------------------------------
   const updateUser = (updatedUser) => {
+    // Rôle toujours conservé (admin si ancien user)
+    updatedUser.role = updatedUser.role || user?.role || "admin";
+
     setUser(updatedUser);
-    localStorage.setItem('user', JSON.stringify(updatedUser));
+    localStorage.setItem("user", JSON.stringify(updatedUser));
   };
 
-  const value = {
-    user,
-    loading,
-    login,
-    register,
-    logout,
-    updateUser,
-    isAuthenticated: !!user,
-  };
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        login,
+        register,
+        logout,
+        updateUser,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
 };
+
+export const useAuth = () => useContext(AuthContext);
