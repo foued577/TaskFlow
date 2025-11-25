@@ -16,14 +16,11 @@ exports.getTasks = async (req, res) => {
       if (!q[k]) delete q[k];
     });
 
-    // Simple filters
     if (q.status) filters.status = q.status;
     if (q.priority) filters.priority = q.priority;
     if (q.projectId) filters.project = q.projectId;
 
-    // =====================================================
-    // 🔐 Role filters
-    // =====================================================
+    // Role filtering
     if (role !== 'admin') {
       filters.$or = [
         { assignedTo: userId },
@@ -31,9 +28,6 @@ exports.getTasks = async (req, res) => {
       ];
     }
 
-    // =====================================================
-    // 🔥 Special filters from frontend
-    // =====================================================
     if (q.filterType === 'assignedToMe') {
       filters.assignedTo = userId;
     }
@@ -48,17 +42,10 @@ exports.getTasks = async (req, res) => {
       .populate('project', 'name color')
       .sort({ createdAt: -1 });
 
-    res.status(200).json({
-      success: true,
-      data: tasks
-    });
+    res.status(200).json({ success: true, data: tasks });
 
   } catch (err) {
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching tasks',
-      error: err.message
-    });
+    res.status(500).json({ success: false, message: 'Error fetching tasks', error: err.message });
   }
 };
 
@@ -71,11 +58,8 @@ exports.getTask = async (req, res) => {
       .populate('assignedTo', 'firstName lastName email')
       .populate('project', 'name color');
 
-    if (!task) {
-      return res.status(404).json({ success: false, message: 'Task not found' });
-    }
+    if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
 
-    // 🔐 Non-admin access rules
     if (req.user.role !== 'admin') {
       const isAssigned = task.assignedTo.some(u => u.toString() === req.user.id);
       const isCreator = task.createdBy.toString() === req.user.id;
@@ -85,16 +69,10 @@ exports.getTask = async (req, res) => {
       }
     }
 
-    res.status(200).json({
-      success: true,
-      data: task
-    });
+    res.status(200).json({ success: true, data: task });
+
   } catch (err) {
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching task',
-      error: err.message
-    });
+    res.status(500).json({ success: false, message: 'Error fetching task', error: err.message });
   }
 };
 
@@ -110,7 +88,6 @@ exports.createTask = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Project not found' });
     }
 
-    // 🔐 Member restriction: must belong to one project team
     if (req.user.role !== 'admin') {
       const userTeamIds = req.user.teams?.map(t => t.toString()) || [];
       const projectTeams = project.teams?.map(t => t.toString()) || [];
@@ -135,16 +112,10 @@ exports.createTask = async (req, res) => {
       createdBy: req.user.id
     });
 
-    res.status(201).json({
-      success: true,
-      data: task
-    });
+    res.status(201).json({ success: true, data: task });
+
   } catch (err) {
-    res.status(500).json({
-      success: false,
-      message: 'Error creating task',
-      error: err.message
-    });
+    res.status(500).json({ success: false, message: 'Error creating task', error: err.message });
   }
 };
 
@@ -156,11 +127,8 @@ exports.updateTask = async (req, res) => {
     const updates = { ...req.body };
 
     const task = await Task.findById(req.params.id);
-    if (!task) {
-      return res.status(404).json({ success: false, message: 'Task not found' });
-    }
+    if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
 
-    // 🔐 Non-admin restriction
     if (req.user.role !== 'admin') {
       const isAssigned = task.assignedTo.some(u => u.toString() === req.user.id);
       const isCreator = task.createdBy.toString() === req.user.id;
@@ -173,16 +141,10 @@ exports.updateTask = async (req, res) => {
     Object.assign(task, updates);
     await task.save();
 
-    res.status(200).json({
-      success: true,
-      data: task
-    });
+    res.status(200).json({ success: true, data: task });
+
   } catch (err) {
-    res.status(500).json({
-      success: false,
-      message: 'Error updating task',
-      error: err.message
-    });
+    res.status(500).json({ success: false, message: 'Error updating task', error: err.message });
   }
 };
 
@@ -192,9 +154,7 @@ exports.updateTask = async (req, res) => {
 exports.deleteTask = async (req, res) => {
   try {
     const task = await Task.findById(req.params.id);
-    if (!task) {
-      return res.status(404).json({ success: false, message: 'Task not found' });
-    }
+    if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
 
     if (req.user.role !== 'admin' && task.createdBy.toString() !== req.user.id) {
       return res.status(403).json({ success: false, message: 'Not authorized' });
@@ -202,16 +162,10 @@ exports.deleteTask = async (req, res) => {
 
     await task.deleteOne();
 
-    res.status(200).json({
-      success: true,
-      message: 'Task deleted'
-    });
+    res.status(200).json({ success: true, message: 'Task deleted' });
+
   } catch (err) {
-    res.status(500).json({
-      success: false,
-      message: 'Error deleting task',
-      error: err.message
-    });
+    res.status(500).json({ success: false, message: 'Error deleting task', error: err.message });
   }
 };
 
@@ -232,5 +186,110 @@ exports.addSubtask = async (req, res) => {
     await task.save();
 
     res.status(200).json({ success: true, data: task });
+
   } catch (err) {
-    res.status(500).json({ success: false, mess
+    res.status(500).json({ success: false, message: 'Error adding subtask', error: err.message });
+  }
+};
+
+// =====================================================
+// TOGGLE SUBTASK
+// =====================================================
+exports.toggleSubtask = async (req, res) => {
+  try {
+    const { id, subtaskId } = req.params;
+
+    const task = await Task.findById(id);
+    if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
+
+    const subtask = task.subtasks.id(subtaskId);
+    if (!subtask) return res.status(404).json({ success: false, message: 'Subtask not found' });
+
+    subtask.completed = !subtask.completed;
+    await task.save();
+
+    res.status(200).json({ success: true, data: task });
+
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: 'Error toggling subtask',
+      error: err.message
+    });
+  }
+};
+
+// =====================================================
+// UPLOAD ATTACHMENT
+// =====================================================
+exports.uploadAttachment = async (req, res) => {
+  try {
+    const task = await Task.findById(req.params.id);
+    if (!task) {
+      return res.status(404).json({ success: false, message: 'Task not found' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'No file uploaded' });
+    }
+
+    const fileData = {
+      filename: req.file.filename,
+      originalName: req.file.originalname,
+      mimeType: req.file.mimetype,
+      size: req.file.size,
+      uploadedAt: new Date()
+    };
+
+    task.attachments.push(fileData);
+    await task.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'File uploaded successfully',
+      data: fileData
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: 'Error uploading attachment',
+      error: err.message
+    });
+  }
+};
+
+// =====================================================
+// GET OVERDUE TASKS
+// =====================================================
+exports.getOverdueTasks = async (req, res) => {
+  try {
+    const now = new Date();
+
+    const filters = {
+      dueDate: { $lt: now },
+      status: { $ne: 'completed' }
+    };
+
+    if (req.user.role !== 'admin') {
+      filters.assignedTo = req.user.id;
+    }
+
+    const tasks = await Task.find(filters)
+      .populate('assignedTo', 'firstName lastName email')
+      .populate('project', 'name');
+
+    res.status(200).json({
+      success: true,
+      count: tasks.length,
+      data: tasks
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching overdue tasks',
+      error: err.message
+    });
+  }
+};
