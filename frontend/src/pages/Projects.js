@@ -17,6 +17,8 @@ import { useAuth } from '../context/AuthContext';
 
 const Projects = () => {
   const { user } = useAuth();
+
+  // ADMIN GLOBAL : role admin OU aucun role (anciens users)
   const isAdmin = !user?.role || user.role === 'admin';
 
   const [projects, setProjects] = useState([]);
@@ -77,7 +79,7 @@ const Projects = () => {
 
   const openCreateModal = () => {
     if (!isAdmin) {
-      toast.error('Vous n’avez pas les droits pour créer un projet');
+      toast.error("Vous n’avez pas les droits pour créer un projet");
       return;
     }
     setModalMode('create');
@@ -88,7 +90,7 @@ const Projects = () => {
 
   const openEditModal = (project) => {
     if (!isAdmin) {
-      toast.error('Vous n’avez pas les droits pour modifier ce projet');
+      toast.error("Vous n’avez pas les droits pour modifier un projet");
       return;
     }
 
@@ -116,6 +118,7 @@ const Projects = () => {
       color: project.color || '#10B981',
       tags: Array.isArray(project.tags) ? project.tags.join(', ') : '',
     });
+
     setShowModal(true);
   };
 
@@ -135,7 +138,7 @@ const Projects = () => {
     e.preventDefault();
 
     if (!isAdmin) {
-      toast.error('Vous n’avez pas les droits pour modifier les projets');
+      toast.error("Vous n’avez pas les droits");
       return;
     }
 
@@ -144,8 +147,8 @@ const Projects = () => {
       return;
     }
 
-    if (!formData.teamIds || formData.teamIds.length === 0) {
-      toast.error('Veuillez sélectionner au moins une équipe');
+    if (!formData.teamIds.length) {
+      toast.error('Sélectionnez au moins une équipe');
       return;
     }
 
@@ -159,17 +162,14 @@ const Projects = () => {
         priority: formData.priority,
         color: formData.color,
         tags: formData.tags
-          ? formData.tags
-              .split(',')
-              .map((t) => t.trim())
-              .filter(Boolean)
+          ? formData.tags.split(',').map((t) => t.trim()).filter(Boolean)
           : [],
       };
 
       if (modalMode === 'create') {
         await projectsAPI.create(data);
-        toast.success('Projet créé avec succès');
-      } else if (selectedProject) {
+        toast.success('Projet créé');
+      } else {
         await projectsAPI.update(selectedProject._id, data);
         toast.success('Projet mis à jour');
       }
@@ -179,18 +179,18 @@ const Projects = () => {
       loadData();
     } catch (error) {
       console.error(error);
-      toast.error(
-        error.response?.data?.message || 'Une erreur est survenue'
-      );
+      toast.error(error.response?.data?.message || 'Erreur');
     }
   };
 
   const deleteProject = async (id) => {
     if (!isAdmin) {
-      toast.error('Vous n’avez pas les droits pour supprimer un projet');
+      toast.error("Vous n’avez pas les droits");
       return;
     }
-    if (!window.confirm('Voulez-vous vraiment supprimer ce projet ?')) return;
+
+    if (!window.confirm('Supprimer ce projet ?')) return;
+
     try {
       await projectsAPI.delete(id);
       toast.success('Projet supprimé');
@@ -214,65 +214,48 @@ const Projects = () => {
 
   return (
     <div>
-      {/* Header */}
+      {/* HEADER */}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Projets</h1>
+
         {isAdmin && (
           <button
             onClick={openCreateModal}
             className="btn btn-primary flex items-center"
           >
-            <Plus className="w-5 h-5 mr-2" /> Nouveau projet
+            <Plus className="w-5 h-5 mr-2" />
+            Nouveau projet
           </button>
         )}
       </div>
 
-      {/* Liste de projets */}
+      {/* LISTE DE PROJETS */}
       {projects.length === 0 ? (
         <div className="card text-center py-12">
           <FolderKanban className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">
-            Aucun projet
-          </h3>
-          <p className="text-gray-600 mb-4">
-            Créez votre premier projet
-          </p>
-          {isAdmin && (
-            <button
-              onClick={openCreateModal}
-              className="btn btn-primary"
-            >
-              Créer un projet
-            </button>
-          )}
+          <h3 className="text-lg font-medium">Aucun projet</h3>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {projects.map((project) => {
             const projectTeams =
-              (project.teams && project.teams.length > 0
-                ? project.teams
-                : project.team
-                ? [project.team]
-                : []) || [];
+              project.teams?.length > 0 ? project.teams : project.team ? [project.team] : [];
 
             return (
-              <div
-                key={project._id}
-                className="card hover:shadow-lg transition-shadow"
-              >
-                {/* Header carte */}
+              <div key={project._id} className="card hover:shadow-lg transition-shadow">
+
+                {/* HEADER CARTE */}
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center">
                     <div
                       className="w-3 h-12 rounded-l-lg mr-3"
                       style={{ backgroundColor: project.color }}
                     />
+
                     <div>
-                      <h3 className="text-lg font-bold text-gray-900">
-                        {project.name}
-                      </h3>
-                      {/* Équipes associées */}
+                      <h3 className="text-lg font-bold">{project.name}</h3>
+
+                      {/* TEAMS */}
                       {projectTeams.length > 0 && (
                         <div className="flex items-center flex-wrap gap-1 mt-1">
                           <Users className="w-3 h-3 text-gray-400 mr-1" />
@@ -281,12 +264,12 @@ const Projects = () => {
                               key={team._id || team}
                               className="badge bg-gray-100 text-gray-700 text-xs"
                             >
-                              {team.name || 'Équipe'}
+                              {team.name}
                             </span>
                           ))}
                           {projectTeams.length > 2 && (
-                            <span className="badge bg-gray-50 text-gray-500 text-xs">
-                              +{projectTeams.length - 2} autres
+                            <span className="badge bg-gray-100 text-gray-500 text-xs">
+                              +{projectTeams.length - 2}
                             </span>
                           )}
                         </div>
@@ -302,6 +285,7 @@ const Projects = () => {
                       >
                         <Edit2 className="w-4 h-4" />
                       </button>
+
                       <button
                         onClick={() => deleteProject(project._id)}
                         className="p-2 text-red-400 hover:text-red-600 rounded-lg hover:bg-red-50"
@@ -312,59 +296,38 @@ const Projects = () => {
                   )}
                 </div>
 
-                {/* Description */}
+                {/* DESCRIPTION */}
                 {project.description && (
                   <p className="text-sm text-gray-600 mb-4 line-clamp-2">
                     {project.description}
                   </p>
                 )}
 
-                {/* Statut + priorité */}
-                <div className="flex items-center justify-between mb-3">
-                  <span
-                    className={`badge ${getPriorityColor(
-                      project.priority
-                    )}`}
-                  >
-                    {project.priority}
-                  </span>
-                  <span
-                    className={`badge ${
-                      project.status === 'active'
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-gray-100 text-gray-800'
-                    }`}
-                  >
-                    {project.status}
-                  </span>
-                </div>
+                {/* PRIORITÉ */}
+                <span className={`badge ${getPriorityColor(project.priority)} mb-3`}>
+                  {project.priority}
+                </span>
 
-                {/* Dates */}
+                {/* DATES */}
                 {(project.startDate || project.endDate) && (
                   <div className="border-t border-gray-200 pt-3 mt-3">
                     <div className="flex items-center text-sm text-gray-600">
                       <CalendarIcon className="w-4 h-4 mr-2" />
                       {project.startDate &&
-                        format(
-                          new Date(project.startDate),
-                          'dd MMM',
-                          { locale: fr }
-                        )}
-                      {project.startDate &&
-                        project.endDate &&
-                        ' - '}
+                        format(new Date(project.startDate), 'dd MMM', {
+                          locale: fr,
+                        })}
+                      {project.startDate && project.endDate && ' - '}
                       {project.endDate &&
-                        format(
-                          new Date(project.endDate),
-                          'dd MMM yyyy',
-                          { locale: fr }
-                        )}
+                        format(new Date(project.endDate), 'dd MMM yyyy', {
+                          locale: fr,
+                        })}
                     </div>
                   </div>
                 )}
 
-                {/* Tags */}
-                {project.tags && project.tags.length > 0 && (
+                {/* TAGS */}
+                {project.tags?.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-3">
                     {project.tags.map((tag, index) => (
                       <span
@@ -382,16 +345,17 @@ const Projects = () => {
         </div>
       )}
 
-      {/* Modal création / édition */}
+      {/* MODAL CREATE / EDIT */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
+
+            {/* HEADER */}
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold">
-                {modalMode === 'create'
-                  ? 'Nouveau projet'
-                  : 'Modifier le projet'}
+                {modalMode === 'create' ? 'Nouveau projet' : 'Modifier le projet'}
               </h2>
+
               <button
                 onClick={() => setShowModal(false)}
                 className="text-gray-400 hover:text-gray-600"
@@ -400,20 +364,19 @@ const Projects = () => {
               </button>
             </div>
 
+            {/* FORMULAIRE */}
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Nom */}
+              {/* NOM */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Nom du projet
                 </label>
+
                 <input
                   type="text"
                   value={formData.name}
                   onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      name: e.target.value,
-                    })
+                    setFormData({ ...formData, name: e.target.value })
                   }
                   className="input"
                   required
@@ -421,17 +384,13 @@ const Projects = () => {
                 />
               </div>
 
-              {/* Équipes (multi-sélection) */}
+              {/* TEAMS */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Équipes du projet
                 </label>
+
                 <div className="border border-gray-200 rounded-lg p-3 max-h-48 overflow-y-auto space-y-2">
-                  {teams.length === 0 && (
-                    <p className="text-sm text-gray-500">
-                      Aucune équipe trouvée. Créez d’abord une équipe.
-                    </p>
-                  )}
                   {teams.map((team) => (
                     <label
                       key={team._id}
@@ -441,32 +400,24 @@ const Projects = () => {
                         type="checkbox"
                         className="rounded border-gray-300"
                         checked={formData.teamIds.includes(team._id)}
-                        onChange={() =>
-                          toggleTeamSelection(team._id)
-                        }
+                        onChange={() => toggleTeamSelection(team._id)}
                         disabled={!isAdmin}
                       />
                       <span>{team.name}</span>
                     </label>
                   ))}
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Vous pouvez sélectionner une ou plusieurs équipes.
-                </p>
               </div>
 
-              {/* Description */}
+              {/* DESCRIPTION */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium mb-2">
                   Description
                 </label>
                 <textarea
                   value={formData.description}
                   onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      description: e.target.value,
-                    })
+                    setFormData({ ...formData, description: e.target.value })
                   }
                   className="input"
                   rows={3}
@@ -474,37 +425,34 @@ const Projects = () => {
                 />
               </div>
 
-              {/* Dates */}
+              {/* DATES */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium mb-2">
                     Date de début
                   </label>
+
                   <input
                     type="date"
                     value={formData.startDate}
                     onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        startDate: e.target.value,
-                      })
+                      setFormData({ ...formData, startDate: e.target.value })
                     }
                     className="input"
                     disabled={!isAdmin}
                   />
                 </div>
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium mb-2">
                     Date de fin
                   </label>
+
                   <input
                     type="date"
                     value={formData.endDate}
                     onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        endDate: e.target.value,
-                      })
+                      setFormData({ ...formData, endDate: e.target.value })
                     }
                     className="input"
                     disabled={!isAdmin}
@@ -512,19 +460,15 @@ const Projects = () => {
                 </div>
               </div>
 
-              {/* Priorité + couleur */}
+              {/* PRIORITÉ + COULEUR */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Priorité
-                  </label>
+                  <label className="block text-sm font-medium mb-2">Priorité</label>
+
                   <select
                     value={formData.priority}
                     onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        priority: e.target.value,
-                      })
+                      setFormData({ ...formData, priority: e.target.value })
                     }
                     className="input"
                     disabled={!isAdmin}
@@ -537,37 +481,31 @@ const Projects = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Couleur
-                  </label>
+                  <label className="block text-sm font-medium mb-2">Couleur</label>
+
                   <input
                     type="color"
                     value={formData.color}
                     onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        color: e.target.value,
-                      })
+                      setFormData({ ...formData, color: e.target.value })
                     }
-                    className="w-full h-10 rounded-lg border border-gray-300 cursor-pointer"
+                    className="w-full h-10 rounded border"
                     disabled={!isAdmin}
                   />
                 </div>
               </div>
 
-              {/* Tags */}
+              {/* TAGS */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium mb-2">
                   Tags (séparés par des virgules)
                 </label>
+
                 <input
                   type="text"
                   value={formData.tags}
                   onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      tags: e.target.value,
-                    })
+                    setFormData({ ...formData, tags: e.target.value })
                   }
                   className="input"
                   placeholder="frontend, backend, design"
@@ -575,17 +513,16 @@ const Projects = () => {
                 />
               </div>
 
-              {/* Boutons */}
+              {/* ACTIONS */}
               <div className="flex space-x-3 pt-4">
                 <button
                   type="submit"
                   disabled={!isAdmin}
-                  className="flex-1 btn btn-primary disabled:opacity-60"
+                  className="flex-1 btn btn-primary disabled:opacity-50"
                 >
-                  {modalMode === 'create'
-                    ? 'Créer'
-                    : 'Mettre à jour'}
+                  {modalMode === 'create' ? 'Créer' : 'Mettre à jour'}
                 </button>
+
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
