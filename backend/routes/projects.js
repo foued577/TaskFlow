@@ -1,15 +1,25 @@
 const express = require('express');
 const router = express.Router();
-const { createProject, getProjects, getProject, updateProject, deleteProject } = require('../controllers/projectController');
+
+const {
+  getProjects,
+  getProject,
+  createProject,
+  updateProject,
+  deleteProject
+} = require('../controllers/projectController');
+
 const { protect } = require('../middleware/auth');
 
-router.route('/')
-  .get(protect, getProjects)
-  .post(protect, createProject);
+// ==================================================
+// Toutes les routes projets → authentification requise
+// ==================================================
 
-router.route('/:id')
-  .get(protect, getProject)
-  .put(protect, updateProject)
-  .delete(protect, deleteProject);
+router.get('/', protect, getProjects);
+router.get('/:id', protect, getProject);
+
+router.post('/', protect, createProject);
+router.put('/:id', protect, updateProject);
+router.delete('/:id', protect, deleteProject);
 
 module.exports = router;
