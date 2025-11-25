@@ -16,12 +16,14 @@ import { fr } from 'date-fns/locale';
 
 const Profile = () => {
   const { user, updateUser } = useAuth();
+
   const [formData, setFormData] = useState({
     firstName: user?.firstName || '',
     lastName: user?.lastName || '',
     bio: user?.bio || '',
     phone: user?.phone || '',
   });
+
   const [loading, setLoading] = useState(false);
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -32,7 +34,15 @@ const Profile = () => {
 
     try {
       const response = await authAPI.updateProfile(formData);
-      updateUser(response.data.data);
+
+      // Assure que le rôle n'est jamais perdu
+      const updated = {
+        ...response.data.data,
+        role: response.data.data.role || user.role || 'admin',
+      };
+
+      updateUser(updated);
+
       toast.success('Profil mis à jour avec succès');
     } catch (error) {
       toast.error(
@@ -50,9 +60,7 @@ const Profile = () => {
       const response = await historyAPI.getUserHistory(20);
       setHistory(response.data.data);
     } catch (error) {
-      toast.error(
-        "Erreur lors du chargement de l'historique"
-      );
+      toast.error("Erreur lors du chargement de l'historique");
     } finally {
       setHistoryLoading(false);
     }
@@ -85,9 +93,7 @@ const Profile = () => {
   };
 
   const roleLabel =
-    user?.role === 'member'
-      ? 'Membre'
-      : 'Administrateur';
+    user?.role === 'member' ? 'Membre' : 'Administrateur';
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -96,19 +102,21 @@ const Profile = () => {
       </h1>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Profile Info Card */}
+        {/* Profile Card */}
         <div className="lg:col-span-1">
           <div className="card text-center">
             <div className="w-24 h-24 rounded-full bg-gradient-to-br from-primary-600 to-primary-700 flex items-center justify-center text-white text-3xl font-bold mx-auto mb-4">
               {user?.firstName?.charAt(0)}
               {user?.lastName?.charAt(0)}
             </div>
+
             <h2 className="text-xl font-bold text-gray-900 mb-1">
               {user?.firstName} {user?.lastName}
             </h2>
+
             <p className="text-gray-600 mb-2">{user?.email}</p>
 
-            {/* Rôle global */}
+            {/* Rôle */}
             <div className="flex items-center justify-center mb-4">
               <Shield className="w-4 h-4 mr-1 text-gray-500" />
               <span className="text-xs font-medium text-gray-700 px-2 py-1 rounded-full bg-gray-100">
@@ -155,21 +163,19 @@ const Profile = () => {
           </div>
         </div>
 
-        {/* Edit Profile Form */}
+        {/* Edit Form */}
         <div className="lg:col-span-2">
           <div className="card">
             <h3 className="text-lg font-bold text-gray-900 mb-6">
               Modifier le profil
             </h3>
 
-            <form
-              onSubmit={handleSubmit}
-              className="space-y-4"
-            >
+            <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
+                {/* Prénom */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
-                    <User className="w-4 h-4 mr-1" />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <User className="w-4 h-4 mr-1 inline" />
                     Prénom
                   </label>
                   <input
@@ -186,9 +192,10 @@ const Profile = () => {
                   />
                 </div>
 
+                {/* Nom */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
-                    <User className="w-4 h-4 mr-1" />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <User className="w-4 h-4 mr-1 inline" />
                     Nom
                   </label>
                   <input
@@ -206,25 +213,24 @@ const Profile = () => {
                 </div>
               </div>
 
+              {/* Email */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
-                  <Mail className="w-4 h-4 mr-1" />
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <Mail className="w-4 h-4 mr-1 inline" />
                   Email
                 </label>
                 <input
                   type="email"
                   value={user?.email}
-                  className="input bg-gray-50"
+                  className="input bg-gray-100"
                   disabled
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  L'email ne peut pas être modifié
-                </p>
               </div>
 
+              {/* Téléphone */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
-                  <Phone className="w-4 h-4 mr-1" />
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <Phone className="w-4 h-4 mr-1 inline" />
                   Téléphone
                 </label>
                 <input
@@ -237,13 +243,14 @@ const Profile = () => {
                     })
                   }
                   className="input"
-                  placeholder="+33 6 12 34 56 78"
+                  placeholder="+33 6 00 00 00 00"
                 />
               </div>
 
+              {/* Bio */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
-                  <FileText className="w-4 h-4 mr-1" />
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <FileText className="w-4 h-4 mr-1 inline" />
                   Bio
                 </label>
                 <textarea
@@ -256,38 +263,33 @@ const Profile = () => {
                   }
                   className="input"
                   rows={4}
-                  maxLength={500}
-                  placeholder="Quelques mots sur vous..."
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  {formData.bio.length}/500 caractères
-                </p>
               </div>
 
+              {/* Save button */}
               <button
                 type="submit"
                 disabled={loading}
                 className="w-full btn btn-primary flex items-center justify-center"
               >
                 <Save className="w-5 h-5 mr-2" />
-                {loading
-                  ? 'Enregistrement...'
-                  : 'Enregistrer les modifications'}
+                {loading ? 'Enregistrement...' : 'Enregistrer'}
               </button>
             </form>
           </div>
 
-          {/* Activity History */}
+          {/* Activity */}
           <div className="card mt-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold text-gray-900 flex items-center">
                 <Activity className="w-5 h-5 mr-2" />
                 Activité récente
               </h3>
+
               {history.length === 0 && (
                 <button
                   onClick={loadHistory}
-                  className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+                  className="text-sm text-primary-600 font-medium"
                 >
                   Charger l'historique
                 </button>
@@ -301,10 +303,7 @@ const Profile = () => {
             ) : history.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 <Activity className="w-12 h-12 mx-auto mb-2 text-gray-300" />
-                <p>
-                  Cliquez sur "Charger l'historique" pour voir votre
-                  activité
-                </p>
+                <p>Aucune activité trouvée</p>
               </div>
             ) : (
               <div className="space-y-3 max-h-96 overflow-y-auto">
@@ -326,11 +325,13 @@ const Profile = () => {
                           {item.entityName}
                         </span>
                       </p>
+
                       {item.project && (
                         <p className="text-xs text-gray-600 mt-1">
-                          Projet: {item.project.name}
+                          Projet : {item.project.name}
                         </p>
                       )}
+
                       <p className="text-xs text-gray-500 mt-1">
                         {format(
                           new Date(item.createdAt),
