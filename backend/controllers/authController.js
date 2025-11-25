@@ -1,9 +1,9 @@
 const User = require('../models/User');
 const { generateToken } = require('../middleware/auth');
 
-// ==============================
-// REGISTER
-// ==============================
+// --------------------------------------------------
+// 🟢 REGISTER
+// --------------------------------------------------
 exports.register = async (req, res) => {
   try {
     const { firstName, lastName, email, password } = req.body;
@@ -15,6 +15,7 @@ exports.register = async (req, res) => {
       });
     }
 
+    // Check email déjà existant
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({
@@ -23,6 +24,7 @@ exports.register = async (req, res) => {
       });
     }
 
+    // Tous les nouveaux comptes sont "member"
     const user = await User.create({
       firstName,
       lastName,
@@ -36,16 +38,7 @@ exports.register = async (req, res) => {
     res.status(201).json({
       success: true,
       data: {
-        user: {
-          id: user._id,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          email: user.email,
-          avatar: user.avatar,
-          bio: user.bio,
-          phone: user.phone,
-          role: user.role,
-        },
+        user,
         token,
       },
     });
@@ -58,9 +51,9 @@ exports.register = async (req, res) => {
   }
 };
 
-// ==============================
-// LOGIN
-// ==============================
+// --------------------------------------------------
+// 🟢 LOGIN
+// --------------------------------------------------
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -91,6 +84,7 @@ exports.login = async (req, res) => {
 
     user.lastLogin = new Date();
 
+    // Ancien user sans role -> admin
     if (!user.role) {
       user.role = 'admin';
     }
@@ -110,7 +104,7 @@ exports.login = async (req, res) => {
           avatar: user.avatar,
           bio: user.bio,
           phone: user.phone,
-          role: user.role || 'admin',
+          role: user.role,
         },
         token,
       },
@@ -124,19 +118,15 @@ exports.login = async (req, res) => {
   }
 };
 
-// ==============================
-// GET ME
-// ==============================
+// --------------------------------------------------
+// 🟢 GET ME
+// --------------------------------------------------
 exports.getMe = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).populate('teams', 'name color');
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found',
-      });
-    }
+    const user = await User.findById(req.user.id).populate(
+      'teams',
+      'name color'
+    );
 
     if (!user.role) {
       user.role = 'admin';
@@ -155,9 +145,9 @@ exports.getMe = async (req, res) => {
   }
 };
 
-// ==============================
-// UPDATE PROFILE
-// ==============================
+// --------------------------------------------------
+// 🟢 UPDATE PROFILE
+// --------------------------------------------------
 exports.updateProfile = async (req, res) => {
   try {
     const { firstName, lastName, bio, phone } = req.body;
