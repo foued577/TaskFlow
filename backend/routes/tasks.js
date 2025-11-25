@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+
 const { 
   createTask, 
   getTasks, 
@@ -11,22 +12,44 @@ const {
   uploadAttachment,
   getOverdueTasks
 } = require('../controllers/taskController');
+
 const { protect } = require('../middleware/auth');
 const upload = require('../middleware/upload');
 
+// =====================================
+// 🔥 GET OVERDUE TASKS
+// =====================================
 router.get('/overdue', protect, getOverdueTasks);
 
+// =====================================
+// 🔥 GET ALL TASKS + CREATE
+// =====================================
 router.route('/')
   .get(protect, getTasks)
   .post(protect, createTask);
 
+// =====================================
+// 🔥 GET ONE / UPDATE / DELETE
+// =====================================
 router.route('/:id')
   .get(protect, getTask)
   .put(protect, updateTask)
   .delete(protect, deleteTask);
 
+// =====================================
+// 🔥 SUBTASKS
+// =====================================
 router.post('/:id/subtasks', protect, addSubtask);
 router.put('/:id/subtasks/:subtaskId', protect, toggleSubtask);
-router.post('/:id/attachments', protect, upload.single('file'), uploadAttachment);
+
+// =====================================
+// 🔥 ATTACHMENT UPLOAD
+// =====================================
+router.post(
+  '/:id/attachments',
+  protect,
+  upload.single('file'),
+  uploadAttachment
+);
 
 module.exports = router;
