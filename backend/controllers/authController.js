@@ -15,7 +15,6 @@ exports.register = async (req, res) => {
       });
     }
 
-    // Déjà existant ?
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({
@@ -24,7 +23,6 @@ exports.register = async (req, res) => {
       });
     }
 
-    // 👉 Tous les nouveaux inscrits sont "member"
     const user = await User.create({
       firstName,
       lastName,
@@ -74,7 +72,6 @@ exports.login = async (req, res) => {
       });
     }
 
-    // ⚠️ Bien récupérer le password (select: false dans le modèle)
     const user = await User.findOne({ email }).select('+password');
 
     if (!user) {
@@ -92,10 +89,8 @@ exports.login = async (req, res) => {
       });
     }
 
-    // Dernière connexion
     user.lastLogin = new Date();
 
-    // Ancien utilisateur sans role → admin par défaut
     if (!user.role) {
       user.role = 'admin';
     }
@@ -134,10 +129,14 @@ exports.login = async (req, res) => {
 // ==============================
 exports.getMe = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).populate(
-      'teams',
-      'name color'
-    );
+    const user = await User.findById(req.user.id).populate('teams', 'name color');
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
 
     if (!user.role) {
       user.role = 'admin';
@@ -176,8 +175,6 @@ exports.updateProfile = async (req, res) => {
     if (lastName) user.lastName = lastName;
     if (bio !== undefined) user.bio = bio;
     if (phone !== undefined) user.phone = phone;
-
-    // On ne touche PAS au rôle ici
 
     await user.save();
 
