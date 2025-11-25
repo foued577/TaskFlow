@@ -24,14 +24,16 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Password is required'],
     minlength: 6,
-    select: false, // important pour login + comparePassword
+    select: false,
   },
-  // 🔐 Rôle global : 'admin' ou 'member'
+
+  // 🔐 Rôle global - IMPORTANT : pas de default !!!
   role: {
     type: String,
     enum: ['admin', 'member'],
-    default: 'member', // les nouveaux inscrits seront "member"
+    default: undefined,
   },
+
   avatar: {
     type: String,
     default: null,
@@ -63,10 +65,9 @@ const userSchema = new mongoose.Schema({
   timestamps: true,
 });
 
-// 🔑 Avant sauvegarde : hash du mot de passe si modifié
+// Hash password
 userSchema.pre('save', async function (next) {
   if (!this.isModified('password')) return next();
-
   try {
     const salt = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
@@ -76,20 +77,20 @@ userSchema.pre('save', async function (next) {
   }
 });
 
-// 🔑 Méthode de comparaison de mot de passe
+// Compare password
 userSchema.methods.comparePassword = async function (candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };
 
-// 🔤 Nom complet virtuel
+// Virtual fullName
 userSchema.virtual('fullName').get(function () {
   return `${this.firstName} ${this.lastName}`;
 });
 
-// 🧼 Nettoyage de la sortie JSON
+// Clean output
 userSchema.set('toJSON', {
   virtuals: true,
-  transform: function (doc, ret) {
+  transform: (doc, ret) => {
     delete ret.password;
     delete ret.__v;
     return ret;
