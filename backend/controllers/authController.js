@@ -1,174 +1,66 @@
+const jwt = require('jsonwebtoken');
 const User = require('../models/User');
-const { generateToken } = require('../middleware/auth');
 
-// @desc    Register new user
-// @route   POST /api/auth/register
-// @access  Public
-exports.register = async (req, res) => {
-  try {
-    const { firstName, lastName, email, password } = req.body;
+// ===============================
+// PROTECT MIDDLEWARE
+// ===============================
+exports.protect = async (req, res, next) => {
+  let token;
 
-    // Validate input
-    if (!firstName || !lastName || !email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide all required fields'
-      });
-    }
+  // Récupération depuis Authorization: Bearer xxx
+  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+    token = req.headers.authorization.split(' ')[1];
+  }
 
-    // Check if user already exists
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({
-        success: false,
-        message: 'User with this email already exists'
-      });
-    }
-
-    // Create user
-    const user = await User.create({
-      firstName,
-      lastName,
-      email,
-      password
-    });
-
-    // Generate token
-    const token = generateToken(user._id);
-
-    res.status(201).json({
-      success: true,
-      data: {
-        user: {
-          id: user._id,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          email: user.email,
-          avatar: user.avatar
-        },
-        token
-      }
-    });
-  } catch (error) {
-    res.status(500).json({
+  if (!token) {
+    return res.status(401).json({
       success: false,
-      message: 'Error creating user',
-      error: error.message
+      message: 'Not authorized - No token'
     });
   }
-};
 
-// @desc    Login user
-// @route   POST /api/auth/login
-// @access  Public
-exports.login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    // Vérification du token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // Validate input
-    if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide email and password'
-      });
-    }
-
-    // Get user with password
-    const user = await User.findOne({ email }).select('+password');
+    // Récupération user
+    const user = await User.findById(decoded.id);
 
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid credentials'
+        message: 'User not found'
       });
     }
 
-    // Check password
-    const isPasswordMatch = await user.comparePassword(password);
+    // Normalisation du rôle :
+    // Tous les anciens comptes SANS role = ADMIN
+    const userRole = user.role || 'admin';
 
-    if (!isPasswordMatch) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials'
-      });
-    }
+    req.user = {
+      id: user._id,
+      role: userRole
+    };
 
-    // Update last login
-    user.lastLogin = new Date();
-    await user.save();
-
-    // Generate token
-    const token = generateToken(user._id);
-
-    res.status(200).json({
-      success: true,
-      data: {
-        user: {
-          id: user._id,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          email: user.email,
-          avatar: user.avatar,
-          bio: user.bio,
-          phone: user.phone
-        },
-        token
-      }
-    });
+    next();
   } catch (error) {
-    res.status(500).json({
+    return res.status(401).json({
       success: false,
-      message: 'Error logging in',
-      error: error.message
+      message: 'Not authorized - Invalid token'
     });
   }
 };
 
-// @desc    Get current user
-// @route   GET /api/auth/me
-// @access  Private
-exports.getMe = async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id).populate('teams', 'name color');
 
-    res.status(200).json({
-      success: true,
-      data: user
-    });
-  } catch (error) {
-    res.status(500).json({
+// ===============================
+// ADMIN ONLY MIDDLEWARE
+// ===============================
+exports.adminOnly = (req, res, next) => {
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).json({
       success: false,
-      message: 'Error getting user',
-      error: error.message
+      message: 'Access denied - admin only'
     });
   }
-};
-
-// @desc    Update user profile
-// @route   PUT /api/auth/profile
-// @access  Private
-exports.updateProfile = async (req, res) => {
-  try {
-    const { firstName, lastName, bio, phone } = req.body;
-
-    const user = await User.findById(req.user.id);
-
-    if (firstName) user.firstName = firstName;
-    if (lastName) user.lastName = lastName;
-    if (bio !== undefined) user.bio = bio;
-    if (phone !== undefined) user.phone = phone;
-
-    await user.save();
-
-    res.status(200).json({
-      success: true,
-      data: user
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error updating profile',
-      error: error.message
-    });
-  }
+  next();
 };
