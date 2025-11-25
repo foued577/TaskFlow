@@ -1,9 +1,9 @@
 const User = require('../models/User');
 const { generateToken } = require('../middleware/auth');
 
-// ======================================================
+// ==============================
 // REGISTER
-// ======================================================
+// ==============================
 exports.register = async (req, res) => {
   try {
     const { firstName, lastName, email, password } = req.body;
@@ -11,26 +11,26 @@ exports.register = async (req, res) => {
     if (!firstName || !lastName || !email || !password) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide all required fields'
+        message: 'Please provide all required fields',
       });
     }
 
-    // Check existing user
+    // Déjà existant ?
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({
         success: false,
-        message: 'User with this email already exists'
+        message: 'User with this email already exists',
       });
     }
 
-    // NEW USER → always member by default
+    // 👉 Tous les nouveaux inscrits sont "member"
     const user = await User.create({
       firstName,
       lastName,
       email,
       password,
-      role: 'member'
+      role: 'member',
     });
 
     const token = generateToken(user._id);
@@ -44,24 +44,25 @@ exports.register = async (req, res) => {
           lastName: user.lastName,
           email: user.email,
           avatar: user.avatar,
-          role: user.role
+          bio: user.bio,
+          phone: user.phone,
+          role: user.role,
         },
-        token
-      }
+        token,
+      },
     });
   } catch (error) {
+    console.error('Register error:', error);
     res.status(500).json({
       success: false,
       message: 'Error creating user',
-      error: error.message
     });
   }
 };
 
-
-// ======================================================
+// ==============================
 // LOGIN
-// ======================================================
+// ==============================
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -69,16 +70,17 @@ exports.login = async (req, res) => {
     if (!email || !password) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide email and password'
+        message: 'Please provide email and password',
       });
     }
 
+    // ⚠️ Bien récupérer le password (select: false dans le modèle)
     const user = await User.findOne({ email }).select('+password');
 
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid credentials'
+        message: 'Invalid credentials',
       });
     }
 
@@ -86,18 +88,21 @@ exports.login = async (req, res) => {
     if (!isMatch) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid credentials'
+        message: 'Invalid credentials',
       });
     }
 
-    // Update last login
+    // Dernière connexion
     user.lastLogin = new Date();
+
+    // Ancien utilisateur sans role → admin par défaut
+    if (!user.role) {
+      user.role = 'admin';
+    }
+
     await user.save();
 
     const token = generateToken(user._id);
-
-    // Normalize role (old users → admin)
-    const safeRole = user.role || 'admin';
 
     res.status(200).json({
       success: true,
@@ -110,77 +115,85 @@ exports.login = async (req, res) => {
           avatar: user.avatar,
           bio: user.bio,
           phone: user.phone,
-          role: safeRole
+          role: user.role || 'admin',
         },
-        token
-      }
+        token,
+      },
     });
   } catch (error) {
+    console.error('Login error:', error);
     res.status(500).json({
       success: false,
       message: 'Error logging in',
-      error: error.message
     });
   }
 };
 
-
-// ======================================================
+// ==============================
 // GET ME
-// ======================================================
+// ==============================
 exports.getMe = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).populate('teams', 'name color');
+    const user = await User.findById(req.user.id).populate(
+      'teams',
+      'name color'
+    );
 
-    const safeRole = user.role || 'admin';
+    if (!user.role) {
+      user.role = 'admin';
+    }
 
     res.status(200).json({
       success: true,
-      data: {
-        ...user.toJSON(),
-        role: safeRole
-      }
+      data: user,
     });
   } catch (error) {
+    console.error('GetMe error:', error);
     res.status(500).json({
       success: false,
       message: 'Error getting user',
-      error: error.message
     });
   }
 };
 
-
-// ======================================================
+// ==============================
 // UPDATE PROFILE
-// ======================================================
+// ==============================
 exports.updateProfile = async (req, res) => {
   try {
     const { firstName, lastName, bio, phone } = req.body;
 
     const user = await User.findById(req.user.id);
 
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
     if (firstName) user.firstName = firstName;
     if (lastName) user.lastName = lastName;
     if (bio !== undefined) user.bio = bio;
     if (phone !== undefined) user.phone = phone;
 
+    // On ne touche PAS au rôle ici
+
     await user.save();
 
-    const safeRole = user.role || 'admin';
+    if (!user.role) {
+      user.role = 'admin';
+    }
 
     res.status(200).json({
       success: true,
-      data: {
-        ...user.toJSON(),
-        role: safeRole
-      }
+      data: user,
     });
   } catch (error) {
+    console.error('Update profile error:', error);
     res.status(500).json({
       success: false,
       message: 'Error updating profile',
-      error: error.message
     });
   }
 };
