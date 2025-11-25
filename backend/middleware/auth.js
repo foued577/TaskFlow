@@ -2,10 +2,10 @@ const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 
 // ===============================
-// GENERATE JWT TOKEN
+// GENERATE TOKEN (FIX)
 // ===============================
-exports.generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, {
+exports.generateToken = (userId) => {
+  return jwt.sign({ id: userId }, process.env.JWT_SECRET, {
     expiresIn: "30d",
   });
 };
@@ -16,8 +16,10 @@ exports.generateToken = (id) => {
 exports.protect = async (req, res, next) => {
   let token;
 
-  // Récupération du token depuis Authorization
-  if (req.headers.authorization && req.headers.authorization.startsWith("Bearer")) {
+  if (
+    req.headers.authorization &&
+    req.headers.authorization.startsWith("Bearer")
+  ) {
     token = req.headers.authorization.split(" ")[1];
   }
 
@@ -29,10 +31,8 @@ exports.protect = async (req, res, next) => {
   }
 
   try {
-    // Vérification du token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // Récupérer l'utilisateur complet
     const user = await User.findById(decoded.id);
 
     if (!user) {
@@ -42,7 +42,7 @@ exports.protect = async (req, res, next) => {
       });
     }
 
-    // Rôle normalisé → anciens utilisateurs deviennent admin
+    // Ancien user sans rôle = admin
     const userRole = user.role || "admin";
 
     req.user = {
@@ -60,7 +60,7 @@ exports.protect = async (req, res, next) => {
 };
 
 // ===============================
-// ADMIN ONLY
+// ADMIN ONLY MIDDLEWARE
 // ===============================
 exports.adminOnly = (req, res, next) => {
   if (!req.user || req.user.role !== "admin") {
