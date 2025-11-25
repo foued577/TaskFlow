@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { authAPI } from "../utils/api";
+import { toast } from "react-toastify";
 
 const AuthContext = createContext();
 
@@ -15,9 +16,9 @@ export const AuthProvider = ({ children }) => {
 
   const [loading, setLoading] = useState(true);
 
-  // -------------------------------
-  // 🔄 Charger l'utilisateur via /auth/me
-  // -------------------------------
+  // ---------------------------------------
+  // 🔄 Recharger l'utilisateur après refresh
+  // ---------------------------------------
   useEffect(() => {
     const loadUser = async () => {
       const token = localStorage.getItem("token");
@@ -30,7 +31,6 @@ export const AuthProvider = ({ children }) => {
         const res = await authAPI.getMe();
         let fetchedUser = res.data.data;
 
-        // Si l'utilisateur n'a pas de rôle → admin par défaut
         if (!fetchedUser.role) {
           fetchedUser.role = "admin";
         }
@@ -49,19 +49,19 @@ export const AuthProvider = ({ children }) => {
     loadUser();
   }, []);
 
-  // -------------------------------
-  // 🟢 Login
-  // -------------------------------
+  // ---------------------------------------
+  // 🟢 LOGIN
+  // ---------------------------------------
   const login = async (email, password) => {
     try {
+      // FIX : envoyer la bonne structure
       const res = await authAPI.login({ email, password });
 
       const token = res.data.data.token;
-      let loggedUser = res.data.data.user;
+      const loggedUser = res.data.data.user;
 
       localStorage.setItem("token", token);
 
-      // Rôle correct
       loggedUser.role = loggedUser.role || "admin";
 
       setUser(loggedUser);
@@ -70,23 +70,27 @@ export const AuthProvider = ({ children }) => {
       return true;
     } catch (error) {
       console.error("Login failed:", error);
+
+      const msg =
+        error.response?.data?.message || "Identifiants incorrects";
+
+      toast.error(msg);
       return false;
     }
   };
 
-  // -------------------------------
-  // 🟢 Register
-  // -------------------------------
+  // ---------------------------------------
+  // 🟢 REGISTER
+  // ---------------------------------------
   const register = async (data) => {
     try {
       const res = await authAPI.register(data);
 
       const token = res.data.data.token;
-      let newUser = res.data.data.user;
+      const newUser = res.data.data.user;
 
       localStorage.setItem("token", token);
 
-      // Nouvelle inscription → MEMBER
       newUser.role = "member";
 
       setUser(newUser);
@@ -95,13 +99,14 @@ export const AuthProvider = ({ children }) => {
       return true;
     } catch (error) {
       console.error("Register failed:", error);
+      toast.error(error.response?.data?.message || "Erreur inscription");
       return false;
     }
   };
 
-  // -------------------------------
-  // 🟢 Logout
-  // -------------------------------
+  // ---------------------------------------
+  // 🟡 LOGOUT
+  // ---------------------------------------
   const logout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
@@ -109,13 +114,11 @@ export const AuthProvider = ({ children }) => {
     window.location.href = "/login";
   };
 
-  // -------------------------------
+  // ---------------------------------------
   // 🟢 Mise à jour du profil
-  // -------------------------------
+  // ---------------------------------------
   const updateUser = (updatedUser) => {
-    // Rôle toujours conservé (admin si ancien user)
     updatedUser.role = updatedUser.role || user?.role || "admin";
-
     setUser(updatedUser);
     localStorage.setItem("user", JSON.stringify(updatedUser));
   };
