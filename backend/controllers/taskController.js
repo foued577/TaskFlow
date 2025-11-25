@@ -12,17 +12,14 @@ exports.getTasks = async (req, res) => {
     let filters = {};
     let queryFilters = { ...req.query };
 
-    // Nettoyage query
     Object.keys(queryFilters).forEach((key) => {
       if (!queryFilters[key]) delete queryFilters[key];
     });
 
-    // Filtres simples
     if (queryFilters.status) filters.status = queryFilters.status;
     if (queryFilters.priority) filters.priority = queryFilters.priority;
     if (queryFilters.projectId) filters.project = queryFilters.projectId;
 
-    // 🔥 Filtrage selon rôle
     if (role !== 'admin') {
       filters.$or = [
         { assignedTo: userId },
@@ -30,7 +27,6 @@ exports.getTasks = async (req, res) => {
       ];
     }
 
-    // 🔥 Filtre Type (frontend)
     if (queryFilters.filterType === 'assignedToMe') {
       filters.assignedTo = userId;
     }
@@ -45,7 +41,10 @@ exports.getTasks = async (req, res) => {
       .populate('project', 'name color')
       .sort({ createdAt: -1 });
 
-    res.status(200).json({ success: true, data: tasks });
+    res.status(200).json({
+      success: true,
+      data: tasks
+    });
 
   } catch (err) {
     res.status(500).json({
@@ -66,20 +65,28 @@ exports.getTask = async (req, res) => {
       .populate('project', 'name color');
 
     if (!task) {
-      return res.status(404).json({ success: false, message: 'Task not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'Task not found'
+      });
     }
 
-    // Sécurité membre
     if (req.user.role !== 'admin') {
-      const isAssigned = task.assignedTo.map(id => id.toString()).includes(req.user.id);
-      const isCreator = task.createdBy.toString() === req.user.id;
-
-      if (!isAssigned && !isCreator) {
-        return res.status(403).json({ success: false, message: 'Not authorized' });
+      if (
+        !task.assignedTo.includes(req.user.id) &&
+        task.createdBy.toString() !== req.user.id
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: 'Not authorized'
+        });
       }
     }
 
-    res.status(200).json({ success: true, data: task });
+    res.status(200).json({
+      success: true,
+      data: task
+    });
 
   } catch (err) {
     res.status(500).json({
@@ -99,10 +106,12 @@ exports.createTask = async (req, res) => {
 
     const project = await Project.findById(projectId);
     if (!project) {
-      return res.status(404).json({ success: false, message: 'Project not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'Project not found'
+      });
     }
 
-    // 🔐 Membre doit appartenir à une équipe du projet
     if (req.user.role !== 'admin') {
       const userTeamIds = req.user.teams?.map(t => t.toString()) || [];
       const projectTeamIds = project.teams?.map(t => t.toString()) || [];
@@ -128,7 +137,10 @@ exports.createTask = async (req, res) => {
       createdBy: req.user.id
     });
 
-    res.status(201).json({ success: true, data: task });
+    res.status(201).json({
+      success: true,
+      data: task
+    });
 
   } catch (err) {
     res.status(500).json({
@@ -140,7 +152,7 @@ exports.createTask = async (req, res) => {
 };
 
 // =========================
-– UPDATE TASK
+// UPDATE TASK
 // =========================
 exports.updateTask = async (req, res) => {
   try {
@@ -148,23 +160,31 @@ exports.updateTask = async (req, res) => {
     const task = await Task.findById(req.params.id);
 
     if (!task) {
-      return res.status(404).json({ success: false, message: 'Task not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'Task not found'
+      });
     }
 
-    // Sécurité membre
     if (req.user.role !== 'admin') {
-      const isAssigned = task.assignedTo.map(id => id.toString()).includes(req.user.id);
-      const isCreator = task.createdBy.toString() === req.user.id;
-
-      if (!isAssigned && !isCreator) {
-        return res.status(403).json({ success: false, message: 'Not authorized' });
+      if (
+        !task.assignedTo.includes(req.user.id) &&
+        task.createdBy.toString() !== req.user.id
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: 'Not authorized'
+        });
       }
     }
 
     Object.assign(task, updates);
     await task.save();
 
-    res.status(200).json({ success: true, data: task });
+    res.status(200).json({
+      success: true,
+      data: task
+    });
 
   } catch (err) {
     res.status(500).json({
@@ -181,18 +201,26 @@ exports.updateTask = async (req, res) => {
 exports.deleteTask = async (req, res) => {
   try {
     const task = await Task.findById(req.params.id);
-
     if (!task) {
-      return res.status(404).json({ success: false, message: 'Task not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'Task not found'
+      });
     }
 
     if (req.user.role !== 'admin' && task.createdBy.toString() !== req.user.id) {
-      return res.status(403).json({ success: false, message: 'Not authorized' });
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized'
+      });
     }
 
     await task.deleteOne();
 
-    res.status(200).json({ success: true, message: 'Task deleted' });
+    res.status(200).json({
+      success: true,
+      message: 'Task deleted'
+    });
 
   } catch (err) {
     res.status(500).json({
@@ -204,7 +232,7 @@ exports.deleteTask = async (req, res) => {
 };
 
 // =========================
-// OVERDUE TASKS (CORRIGÉE)
+// OVERDUE TASKS
 // =========================
 exports.getOverdueTasks = async (req, res) => {
   try {
