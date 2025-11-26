@@ -1,209 +1,162 @@
 const Project = require('../models/Project');
 const Team = require('../models/Team');
 
-// Helper : déterminer si user est admin global
-const isGlobalAdmin = (user) => {
-return !user.role || user.role === 'admin';
-};
+// Helper : admin global
+const isGlobalAdmin = (user) => !user.role || user.role === "admin";
 
 // ===============================================
-// 🔹 GET ALL PROJECTS
+// GET ALL PROJECTS
 // ===============================================
 exports.getProjects = async (req, res) => {
 try {
 let query = {};
 
-// 🔒 Si MEMBER → ne voir que ses projets via ses équipes
 if (!isGlobalAdmin(req.user)) {
-const userTeams = req.user.teams || [];
+const userTeams = req.user.teams?.map(id => id.toString()) || [];
 query = { teams: { $in: userTeams } };
 }
 
 const projects = await Project.find(query)
-.populate('teams', 'name color')
+.populate("teams", "name color")
 .sort({ createdAt: -1 });
 
-res.status(200).json({
-success: true,
-count: projects.length,
-data: projects
-});
+res.status(200).json({ success: true, data: projects });
 
 } catch (error) {
-res.status(500).json({
-success: false,
-message: 'Error fetching projects',
-error: error.message
-});
+console.error("GetProjects ERROR:", error);
+res.status(500).json({ success: false, message: "Error fetching projects" });
 }
 };
 
 // ===============================================
-// 🔹 GET ONE PROJECT
+// GET ONE PROJECT
 // ===============================================
 exports.getProject = async (req, res) => {
 try {
 const project = await Project.findById(req.params.id)
-.populate('teams', 'name color');
+.populate("teams", "name color");
 
-if (!project) {
-return res.status(404).json({
-success: false,
-message: 'Project not found'
-});
-}
+if (!project)
+return res.status(404).json({ success: false, message: "Project not found" });
 
-// 🔒 Si MEMBER → vérifier qu'il appartient à une équipe du projet
 if (!isGlobalAdmin(req.user)) {
-const userTeams = req.user.teams.map(id => id.toString());
+const userTeams = req.user.teams.map(t => t.toString());
 const projectTeams = project.teams.map(t => t._id.toString());
 
-const allowed = projectTeams.some(teamId => userTeams.includes(teamId));
-
+const allowed = projectTeams.some(id => userTeams.includes(id));
 if (!allowed) {
-return res.status(403).json({
-success: false,
-message: 'You do not have access to this project'
-});
+return res.status(403).json({ success: false, message: "Access denied" });
 }
 }
 
-res.status(200).json({
-success: true,
-data: project
-});
+res.status(200).json({ success: true, data: project });
 
 } catch (error) {
-res.status(500).json({
-success: false,
-message: 'Error fetching project',
-error: error.message
-});
+console.error("GetProject ERROR:", error);
+res.status(500).json({ success: false, message: "Error fetching project" });
 }
 };
 
 // ===============================================
-// 🔹 CREATE PROJECT (ADMIN ONLY)
+// CREATE PROJECT
 // ===============================================
 exports.createProject = async (req, res) => {
 try {
 if (!isGlobalAdmin(req.user)) {
-return res.status(403).json({
+return res.status(403).json({ success: false, message: "Admins only" });
+}
+
+let { name, description, teamIds, startDate, endDate, tags, priority, color } = req.body;
+
+if (!name || !teamIds || !Array.isArray(teamIds) || teamIds.length === 0) {
+return res.status(400).json({
 success: false,
-message: 'Only administrators can create projects'
+message: "Project name and at least one team required"
 });
 }
 
-let { name, description, teamIds, teams, startDate, endDate, tags, priority, color } = req.body;
+// Normalize teamIds
+teamIds = teamIds.map(id =>
+typeof id === "object" ? id._id?.toString() : id.toString()
+);
 
-// 🟢 Rendre compatible teams ou teamIds
-const finalTeams = teamIds || teams;
-
-if (!name || !finalTeams || finalTeams.length === 0) {
+// Validate teams exist
+const teamsExist = await Team.find({ _id: { $in: teamIds } });
+if (teamsExist.length !== teamIds.length) {
 return res.status(400).json({
 success: false,
-message: 'Project name and at least one team are required'
+message: "One or more teams do not exist"
 });
 }
 
 const project = await Project.create({
 name,
 description,
-teams: finalTeams,
-startDate,
-endDate,
-tags,
-priority,
-color
+teams: teamIds,
+startDate: startDate || null,
+endDate: endDate || null,
+tags: Array.isArray(tags) ? tags : [],
+priority: priority || "medium",
+color: color || "#10B981"
 });
 
-res.status(201).json({
-success: true,
-data: project
-});
+res.status(201).json({ success: true, data: project });
 
 } catch (error) {
-console.error("CREATE PROJECT ERROR:", error);
-res.status(500).json({
-success: false,
-message: 'Error creating project',
-error: error.message
-});
+console.error("CreateProject ERROR:", error);
+res.status(500).json({ success: false, message: "Error creating project" });
 }
 };
 
 // ===============================================
-// 🔹 UPDATE PROJECT (ADMIN ONLY)
+// UPDATE PROJECT
 // ===============================================
 exports.updateProject = async (req, res) => {
 try {
 if (!isGlobalAdmin(req.user)) {
-return res.status(403).json({
-success: false,
-message: 'Only administrators can update projects'
-});
+return res.status(403).json({ success: false, message: "Admins only" });
 }
 
-const project = await Project.findByIdAndUpdate(
-req.params.id,
-req.body,
-{ new: true }
+const data = req.body;
+
+if (data.teamIds) {
+data.teamIds = data.teamIds.map(id =>
+typeof id === "object" ? id._id?.toString() : id.toString()
 );
-
-if (!project) {
-return res.status(404).json({
-success: false,
-message: 'Project not found'
-});
 }
 
-res.status(200).json({
-success: true,
-data: project
-});
+const project = await Project.findByIdAndUpdate(req.params.id, data, { new: true });
+
+if (!project)
+return res.status(404).json({ success: false, message: "Project not found" });
+
+res.status(200).json({ success: true, data: project });
 
 } catch (error) {
-res.status(500).json({
-success: false,
-message: 'Error updating project',
-error: error.message
-});
+console.error("UpdateProject ERROR:", error);
+res.status(500).json({ success: false, message: "Error updating project" });
 }
 };
 
 // ===============================================
-// 🔹 DELETE PROJECT (ADMIN ONLY)
+// DELETE PROJECT
 // ===============================================
 exports.deleteProject = async (req, res) => {
 try {
 if (!isGlobalAdmin(req.user)) {
-return res.status(403).json({
-success: false,
-message: 'Only administrators can delete projects'
-});
+return res.status(403).json({ success: false, message: "Admins only" });
 }
 
 const project = await Project.findById(req.params.id);
-
-if (!project) {
-return res.status(404).json({
-success: false,
-message: 'Project not found'
-});
-}
+if (!project)
+return res.status(404).json({ success: false, message: "Project not found" });
 
 await project.deleteOne();
 
-res.status(200).json({
-success: true,
-message: 'Project deleted'
-});
+res.status(200).json({ success: true, message: "Project deleted" });
 
 } catch (error) {
-res.status(500).json({
-success: false,
-message: 'Error deleting project',
-error: error.message
-});
+console.error("DeleteProject ERROR:", error);
+res.status(500).json({ success: false, message: "Error deleting project" });
 }
 };
