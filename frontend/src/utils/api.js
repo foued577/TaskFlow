@@ -1,11 +1,15 @@
 import axios from "axios";
-// AUTO-DETECT ENVIRONMENT
+// ---------------------------------------------------------
+// ✅ AUTO-DETECT ENVIRONMENT (dev ou production Render)
+// ---------------------------------------------------------
 const API_URL =
  process.env.REACT_APP_API_URL ||
  (window.location.hostname.includes("onrender.com")
    ? "https://taskflow-1-jwh1.onrender.com/api"
    : "http://localhost:5000/api");
-// Axios instance
+// ---------------------------------------------------------
+// 🔧 Axios instance
+// ---------------------------------------------------------
 const api = axios.create({
  baseURL: API_URL,
  headers: {
@@ -13,7 +17,9 @@ const api = axios.create({
  },
  timeout: 15000,
 });
-// Add JWT to headers
+// ---------------------------------------------------------
+// 🔐 Add JWT to headers
+// ---------------------------------------------------------
 api.interceptors.request.use(
  (config) => {
    const token = localStorage.getItem("token");
@@ -24,36 +30,46 @@ api.interceptors.request.use(
  },
  (error) => Promise.reject(error)
 );
-// Error handling & retry logic
+// ---------------------------------------------------------
+// 🚨 Error handling & retry logic
+// ---------------------------------------------------------
 api.interceptors.response.use(
  (response) => response,
  async (error) => {
    const originalRequest = error.config;
+   // 401 → user not authenticated
    if (error.response?.status === 401) {
+     console.warn("Unauthorized → clearing session");
      localStorage.removeItem("token");
      localStorage.removeItem("user");
      window.location.href = "/login";
      return Promise.reject(error);
    }
+   // 503 → retry once
    if (error.response?.status === 503 && !originalRequest._retry) {
      originalRequest._retry = true;
      const wait = error.response.data?.retryAfter || 3;
-     await new Promise((r) => setTimeout(r, wait * 1000));
+     console.log(`Server unavailable → retrying in ${wait}s`);
+     await new Promise((resolve) => setTimeout(resolve, wait * 1000));
      return api(originalRequest);
    }
+   // Network error → retry once
    if (
-     (error.code === "ECONNABORTED" ||
-       error.message === "Network Error") &&
+     (error.code === "ECONNABORTED" || error.message === "Network Error") &&
      !originalRequest._retryNetwork
    ) {
      originalRequest._retryNetwork = true;
-     await new Promise((r) => setTimeout(r, 2000));
+     console.log("Network error → retrying in 2s");
+     await new Promise((resolve) => setTimeout(resolve, 2000));
      return api(originalRequest);
    }
    return Promise.reject(error);
  }
 );
 export default api;
+// ---------------------------------------------------------
+// 📌 API ENDPOINTS
+// ---------------------------------------------------------
 // AUTH
 export const authAPI = {
  register: (data) => api.post("/auth/register", data),
@@ -63,12 +79,12 @@ export const authAPI = {
 };
 // USERS
 export const usersAPI = {
- search: (query, teamId) =>
+ search: (query = "", teamId = null) =>
    api.get("/users/search", { params: { q: query, teamId } }),
  getUser: (id) => api.get(`/users/${id}`),
- createUser: (data) => api.post("/users", data),
- updateRole: (id, role) => api.put(`/users/${id}/role`, { role }),
- deleteUser: (id) => api.delete(`/users/${id}`),
+ create: (data) => api.post("/users", data), // ADMIN ONLY
+ updateRole: (id, data) => api.put(`/users/${id}/role`, data), // ADMIN ONLY
+ delete: (id) => api.delete(`/users/${id}`), // ADMIN ONLY
 };
 // TEAMS
 export const teamsAPI = {
@@ -77,8 +93,7 @@ export const teamsAPI = {
  create: (data) => api.post("/teams", data),
  update: (id, data) => api.put(`/teams/${id}`, data),
  addMember: (id, userId) => api.post(`/teams/${id}/members`, { userId }),
- removeMember: (id, userId) =>
-   api.delete(`/teams/${id}/members/${userId}`),
+ removeMember: (id, userId) => api.delete(`/teams/${id}/members/${userId}`),
 };
 // PROJECTS
 export const projectsAPI = {
