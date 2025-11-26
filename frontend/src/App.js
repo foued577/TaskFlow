@@ -1,50 +1,58 @@
-import React from "react";
-import {
- BrowserRouter as Router,
- Routes,
- Route,
- Navigate,
-} from "react-router-dom";
-import { AuthProvider, useAuth } from "./context/AuthContext";
-import { ToastContainer } from "react-toastify";
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { ToastContainer } from 'react-toastify';
 // Pages
-import Login from "./pages/Login";
-import Register from "./pages/Register";
-import Dashboard from "./pages/Dashboard";
-import Teams from "./pages/Teams";
-import Projects from "./pages/Projects";
-import Tasks from "./pages/Tasks";
-import Kanban from "./pages/Kanban";
-import Calendar from "./pages/Calendar";
-import Profile from "./pages/Profile";
-import Export from "./pages/Export";
+import Login from './pages/Login';
+import Register from './pages/Register';
+import Dashboard from './pages/Dashboard';
+import Teams from './pages/Teams';
+import Projects from './pages/Projects';
+import Tasks from './pages/Tasks';
+import Kanban from './pages/Kanban';
+import Calendar from './pages/Calendar';
+import Profile from './pages/Profile';
+import Export from './pages/Export';
+// 🔥 NEW PAGE
+import UserManagement from './pages/UserManagement';
 // Components
-import Layout from "./components/Layout";
-import Loading from "./components/Loading";
-// =======================================================
-// 🛡 PROTECTED ROUTE
-// =======================================================
+import Layout from './components/Layout';
+import Loading from './components/Loading';
+
+// ============================
+// 🔐 Protected Route (User logged in)
+// ============================
 const ProtectedRoute = ({ children }) => {
+ const { isAuthenticated, loading } = useAuth();
+ if (loading) return <Loading />;
+ return isAuthenticated ? children : <Navigate to="/login" replace />;
+};
+
+// ============================
+// 🔐 Admin-only Route
+// ============================
+const AdminRoute = ({ children }) => {
  const { user, loading } = useAuth();
  if (loading) return <Loading />;
- return user ? children : <Navigate to="/login" replace />;
+ return user?.role === "admin"
+   ? children
+   : <Navigate to="/" replace />;
 };
-// =======================================================
-// 🚪 PUBLIC ROUTE (login/register)
-// =======================================================
+
+// ============================
+// ⛔ Public Route (redirect if logged in)
+// ============================
 const PublicRoute = ({ children }) => {
- const { user, loading } = useAuth();
+ const { isAuthenticated, loading } = useAuth();
  if (loading) return <Loading />;
- return user ? <Navigate to="/" replace /> : children;
+ return !isAuthenticated ? children : <Navigate to="/" replace />;
 };
-// =======================================================
-// ROUTES
-// =======================================================
+
 function AppRoutes() {
  return (
 <Router>
 <Routes>
-       {/* Public */}
+       {/* Public routes */}
 <Route
          path="/login"
          element={
@@ -61,7 +69,7 @@ function AppRoutes() {
 </PublicRoute>
          }
        />
-       {/* Protected */}
+       {/* Protected routes */}
 <Route
          path="/"
          element={
@@ -78,16 +86,23 @@ function AppRoutes() {
 <Route path="calendar" element={<Calendar />} />
 <Route path="export" element={<Export />} />
 <Route path="profile" element={<Profile />} />
+         {/* 🔥 NEW: Admin-only route */}
+<Route
+           path="admin/users"
+           element={
+<AdminRoute>
+<UserManagement />
+</AdminRoute>
+           }
+         />
 </Route>
-       {/* Redirect unknown */}
+       {/* Fallback */}
 <Route path="*" element={<Navigate to="/" replace />} />
 </Routes>
 </Router>
  );
 }
-// =======================================================
-// APP WRAPPER
-// =======================================================
+
 function App() {
  return (
 <AuthProvider>
@@ -95,7 +110,12 @@ function App() {
 <ToastContainer
        position="top-right"
        autoClose={3000}
+       hideProgressBar={false}
        newestOnTop
+       closeOnClick
+       pauseOnFocusLoss
+       draggable
+       pauseOnHover
        theme="light"
      />
 </AuthProvider>
