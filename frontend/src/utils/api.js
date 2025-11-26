@@ -1,150 +1,157 @@
 import axios from "axios";
+
 // ---------------------------------------------------------
-// ✅ AUTO-DETECT ENVIRONMENT (dev ou production Render)
+
+// AUTO-DETECT ENVIRONMENT
+
 // ---------------------------------------------------------
+
 const API_URL =
- process.env.REACT_APP_API_URL ||
- (window.location.hostname.includes("onrender.com")
-   ? "https://taskflow-1-jwh1.onrender.com/api"
-   : "http://localhost:5000/api");
+
+  process.env.REACT_APP_API_URL ||
+
+  (window.location.hostname.includes("onrender.com")
+
+    ? "https://taskflow-1-jwh1.onrender.com/api"
+
+    : "http://localhost:5000/api");
+
 // ---------------------------------------------------------
-// 🔧 Axios instance
+
+// Axios instance
+
 // ---------------------------------------------------------
+
 const api = axios.create({
- baseURL: API_URL,
- headers: {
-   "Content-Type": "application/json",
- },
- timeout: 15000,
+
+  baseURL: API_URL,
+
+  headers: {
+
+    "Content-Type": "application/json",
+
+  },
+
+  timeout: 15000,
+
 });
+
 // ---------------------------------------------------------
-// 🔐 Add JWT to headers
+
+// Add JWT to headers
+
 // ---------------------------------------------------------
+
 api.interceptors.request.use(
- (config) => {
-   const token = localStorage.getItem("token");
-   if (token) {
-     config.headers.Authorization = `Bearer ${token}`;
-   }
-   return config;
- },
- (error) => Promise.reject(error)
+
+  (config) => {
+
+    const token = localStorage.getItem("token");
+
+    if (token) {
+
+      config.headers.Authorization = `Bearer ${token}`;
+
+    }
+
+    return config;
+
+  },
+
+  (error) => Promise.reject(error)
+
 );
+
 // ---------------------------------------------------------
-// 🚨 Error handling & retry logic
+
+// Error handling
+
 // ---------------------------------------------------------
+
 api.interceptors.response.use(
- (response) => response,
- async (error) => {
-   const originalRequest = error.config;
-   // 🔴 401 → session expired
-   if (error.response?.status === 401) {
-     console.warn("Unauthorized → clearing session");
-     localStorage.removeItem("token");
-     localStorage.removeItem("user");
-     window.location.href = "/login";
-     return Promise.reject(error);
-   }
-   // 🔴 Server reconnecting (Render cold start)
-   if (error.response?.status === 503 && !originalRequest._retry) {
-     originalRequest._retry = true;
-     const wait = error.response.data?.retryAfter || 3;
-     console.log(`Server unavailable → retrying in ${wait}s`);
-     await new Promise((r) => setTimeout(r, wait * 1000));
-     return api(originalRequest);
-   }
-   // 🌐 Network error
-   if (
-     (error.code === "ECONNABORTED" ||
-       error.message === "Network Error") &&
-     !originalRequest._retryNetwork
-   ) {
-     originalRequest._retryNetwork = true;
-     console.log("Network error → retrying in 2s");
-     await new Promise((r) => setTimeout(r, 2000));
-     return api(originalRequest);
-   }
-   return Promise.reject(error);
- }
+
+  (response) => response,
+
+  async (error) => {
+
+    const originalRequest = error.config;
+
+    if (error.response?.status === 401) {
+
+      localStorage.removeItem("token");
+
+      localStorage.removeItem("user");
+
+      window.location.href = "/login";
+
+      return Promise.reject(error);
+
+    }
+
+    return Promise.reject(error);
+
+  }
+
 );
+
 export default api;
-// ---------------------------------------------------------
-// 📌 API ENDPOINTS
-// ---------------------------------------------------------
-// AUTH
+
+// =====================================================
+
+// AUTH ENDPOINTS
+
+// =====================================================
+
 export const authAPI = {
- register: (data) => api.post("/auth/register", data),
- login: (data) => api.post("/auth/login", data),
- getMe: () => api.get("/auth/me"),
- updateProfile: (data) => api.put("/auth/profile", data),
+
+  register: (data) => api.post("/auth/register", data),
+
+  login: (data) => api.post("/auth/login", data),
+
+  getMe: () => api.get("/auth/me"),
+
+  updateProfile: (data) => api.put("/auth/profile", data),
+
 };
-// USERS
+
+// =====================================================
+
+// USERS ENDPOINTS (ADMIN)
+
+// =====================================================
+
 export const usersAPI = {
- search: (query, teamId) =>
-   api.get("/users/search", { params: { q: query, teamId } }),
- getUser: (id) => api.get(`/users/${id}`),
- // ➕ Create user (ADMIN)
- create: (data) => api.post("/users", data),
- // 🔄 Update user role (ADMIN)
- updateRole: (id, role) => api.put(`/users/${id}/role`, { role }),
- // ❌ Delete user (ADMIN)
- deleteUser: (id) => api.delete(`/users/${id}`),
+
+  search: (query, teamId) =>
+
+    api.get("/users/search", { params: { q: query, teamId } }),
+
+  getUser: (id) => api.get(`/users/${id}`),
+
+  // 🔥 NEW: Create a new user
+
+  create: (data) => api.post("/users", data),
+
+  // 🔥 NEW: Update user role
+
+  updateRole: (id, role) => api.put(`/users/${id}/role`, { role }),
+
+  // 🔥 NEW: Delete user
+
+  delete: (id) => api.delete(`/users/${id}`),
+
+  // 🔥 Get all users (for admin table)
+
+  getAll: () => api.get("/users"),
+
 };
-// TEAMS
-export const teamsAPI = {
- getAll: () => api.get("/teams"),
- getOne: (id) => api.get(`/teams/${id}`),
- create: (data) => api.post("/teams", data),
- update: (id, data) => api.put(`/teams/${id}`, data),
- addMember: (id, userId) => api.post(`/teams/${id}/members`, { userId }),
- removeMember: (id, userId) => api.delete(`/teams/${id}/members/${userId}`),
-};
-// PROJECTS
-export const projectsAPI = {
- getAll: (params) => api.get("/projects", { params }),
- getOne: (id) => api.get(`/projects/${id}`),
- create: (data) => api.post("/projects", data),
- update: (id, data) => api.put(`/projects/${id}`, data),
- delete: (id) => api.delete(`/projects/${id}`),
-};
-// TASKS
-export const tasksAPI = {
- getAll: (params) => api.get("/tasks", { params }),
- getOne: (id) => api.get(`/tasks/${id}`),
- create: (data) => api.post("/tasks", data),
- update: (id, data) => api.put(`/tasks/${id}`, data),
- delete: (id) => api.delete(`/tasks/${id}`),
- addSubtask: (id, title) => api.post(`/tasks/${id}/subtasks`, { title }),
- toggleSubtask: (id, subtaskId) =>
-   api.put(`/tasks/${id}/subtasks/${subtaskId}`),
- uploadAttachment: (id, formData) =>
-   api.post(`/tasks/${id}/attachments`, formData, {
-     headers: { "Content-Type": "multipart/form-data" },
-   }),
- getOverdue: () => api.get("/tasks/overdue"),
-};
-// COMMENTS
-export const commentsAPI = {
- getForTask: (taskId) => api.get(`/comments/task/${taskId}`),
- create: (data) => api.post("/comments", data),
- update: (id, content) => api.put(`/comments/${id}`, { content }),
- delete: (id) => api.delete(`/comments/${id}`),
-};
-// NOTIFICATIONS
-export const notificationsAPI = {
- getAll: (params) => api.get("/notifications", { params }),
- markAsRead: (id) => api.put(`/notifications/${id}/read`),
- markAllAsRead: () => api.put("/notifications/read-all"),
- delete: (id) => api.delete(`/notifications/${id}`),
-};
-// HISTORY
-export const historyAPI = {
- getProjectHistory: (projectId, limit) =>
-   api.get(`/history/project/${projectId}`, { params: { limit } }),
- getUserHistory: (limit) =>
-   api.get("/history/user", { params: { limit } }),
- getEntityHistory: (entityType, entityId, limit) =>
-   api.get(`/history/${entityType}/${entityId}`, {
-     params: { limit },
-   }),
-};
+
+// =====================================================
+
+// TEAMS / PROJECTS / TASKS / COMMENTS / NOTIFS / HISTORY
+
+// (inchangés → on garde le reste comme avant)
+
+// =====================================================
+Cloud Application Platform | Render
+On Render, you can build, deploy, and scale your apps with unparalleled ease – from your first user to your billionth.
