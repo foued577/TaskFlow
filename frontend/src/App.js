@@ -1,58 +1,50 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
-import { ToastContainer } from 'react-toastify';
+import React from "react";
+import {
+ BrowserRouter as Router,
+ Routes,
+ Route,
+ Navigate,
+} from "react-router-dom";
+import { AuthProvider, useAuth } from "./context/AuthContext";
+import { ToastContainer } from "react-toastify";
 // Pages
-import Login from './pages/Login';
-import Register from './pages/Register';
-import Dashboard from './pages/Dashboard';
-import Teams from './pages/Teams';
-import Projects from './pages/Projects';
-import Tasks from './pages/Tasks';
-import Kanban from './pages/Kanban';
-import Calendar from './pages/Calendar';
-import Profile from './pages/Profile';
-import Export from './pages/Export';
-// 🔥 NEW PAGE
-import UserManagement from './pages/UserManagement';
+import Login from "./pages/Login";
+import Register from "./pages/Register";
+import Dashboard from "./pages/Dashboard";
+import Teams from "./pages/Teams";
+import Projects from "./pages/Projects";
+import Tasks from "./pages/Tasks";
+import Kanban from "./pages/Kanban";
+import Calendar from "./pages/Calendar";
+import Profile from "./pages/Profile";
+import Export from "./pages/Export";
+import UserManagement from "./pages/UserManagement"; // ✅ NEW PAGE
 // Components
-import Layout from './components/Layout';
-import Loading from './components/Loading';
-
-// ============================
-// 🔐 Protected Route (User logged in)
-// ============================
+import Layout from "./components/Layout";
+import Loading from "./components/Loading";
+// Component: Protected route
 const ProtectedRoute = ({ children }) => {
- const { isAuthenticated, loading } = useAuth();
+ const { user, loading } = useAuth();
  if (loading) return <Loading />;
- return isAuthenticated ? children : <Navigate to="/login" replace />;
+ return user ? children : <Navigate to="/login" replace />;
 };
-
-// ============================
-// 🔐 Admin-only Route
-// ============================
+// Component: Admin only route
 const AdminRoute = ({ children }) => {
  const { user, loading } = useAuth();
  if (loading) return <Loading />;
- return user?.role === "admin"
-   ? children
-   : <Navigate to="/" replace />;
+ return user?.role === "admin" ? children : <Navigate to="/" replace />;
 };
-
-// ============================
-// ⛔ Public Route (redirect if logged in)
-// ============================
+// Component: Public route
 const PublicRoute = ({ children }) => {
- const { isAuthenticated, loading } = useAuth();
+ const { user, loading } = useAuth();
  if (loading) return <Loading />;
- return !isAuthenticated ? children : <Navigate to="/" replace />;
+ return !user ? children : <Navigate to="/" replace />;
 };
-
 function AppRoutes() {
  return (
 <Router>
 <Routes>
-       {/* Public routes */}
+       {/* Public */}
 <Route
          path="/login"
          element={
@@ -69,7 +61,7 @@ function AppRoutes() {
 </PublicRoute>
          }
        />
-       {/* Protected routes */}
+       {/* Protected layout */}
 <Route
          path="/"
          element={
@@ -86,9 +78,9 @@ function AppRoutes() {
 <Route path="calendar" element={<Calendar />} />
 <Route path="export" element={<Export />} />
 <Route path="profile" element={<Profile />} />
-         {/* 🔥 NEW: Admin-only route */}
+         {/* ADMIN ONLY */}
 <Route
-           path="admin/users"
+           path="users"
            element={
 <AdminRoute>
 <UserManagement />
@@ -102,22 +94,11 @@ function AppRoutes() {
 </Router>
  );
 }
-
 function App() {
  return (
 <AuthProvider>
 <AppRoutes />
-<ToastContainer
-       position="top-right"
-       autoClose={3000}
-       hideProgressBar={false}
-       newestOnTop
-       closeOnClick
-       pauseOnFocusLoss
-       draggable
-       pauseOnHover
-       theme="light"
-     />
+<ToastContainer position="top-right" autoClose={3000} theme="light" />
 </AuthProvider>
  );
 }
