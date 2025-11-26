@@ -4,7 +4,7 @@ const router = express.Router();
 const {
   searchUsers,
   getUser
-} = require("../controllers/userController");
+} = require("../controllers/userController.js");
 
 const User = require("../models/User");
 const { protect, adminOnly } = require("../middleware/auth");
