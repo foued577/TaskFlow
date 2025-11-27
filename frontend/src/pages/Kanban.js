@@ -4,13 +4,11 @@ import { toast } from 'react-toastify';
 import { Plus, Filter } from 'lucide-react';
 import Loading from '../components/Loading';
 import TaskModal from '../components/TaskModal';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/AuthContext'; // ⬅️ AJOUT
 
 const Kanban = () => {
-const { user } = useAuth();
-
-// 🔒 ADMIN GLOBAL = role admin OU ancien utilisateur sans role
-const isAdmin = !user?.role || user.role === "admin";
+const { user } = useAuth(); // ⬅️ AJOUT
+const isAdmin = !user?.role || user.role === "admin"; // ⬅️ AJOUT
 
 const [tasks, setTasks] = useState([]);
 const [projects, setProjects] = useState([]);
@@ -36,7 +34,6 @@ const [tasksRes, projectsRes] = await Promise.all([
 tasksAPI.getAll(selectedProject ? { projectId: selectedProject } : {}),
 projectsAPI.getAll(),
 ]);
-
 setTasks(tasksRes.data.data);
 setProjects(projectsRes.data.data);
 } catch (error) {
@@ -47,24 +44,21 @@ setLoading(false);
 };
 
 const handleTaskClick = (task) => {
-if (!isAdmin) return; // 🔒 Les membres ne peuvent PAS ouvrir la modale
 setSelectedTask(task);
 setShowModal(true);
 };
 
 const handleDragStart = (e, task) => {
-if (!isAdmin) return; // 🔒 Pas de drag & drop pour les membres
 setDraggedTask(task);
 e.dataTransfer.effectAllowed = 'move';
 };
 
 const handleDragOver = (e) => {
-if (isAdmin) e.preventDefault();
+e.preventDefault();
+e.dataTransfer.dropEffect = 'move';
 };
 
 const handleDrop = async (e, newStatus) => {
-if (!isAdmin) return; // 🔒 Membres → interdit
-
 e.preventDefault();
 
 if (!draggedTask || draggedTask.status === newStatus) {
@@ -101,11 +95,11 @@ if (loading) return <Loading fullScreen={false} />;
 
 return (
 <div>
-{/* HEADER */}
+{/* Header */}
 <div className="flex items-center justify-between mb-6">
 <h1 className="text-2xl font-bold text-gray-900">Tableau Kanban</h1>
 
-{/* 🔥 ADMIN ONLY → Afficher bouton “Nouvelle tâche” */}
+{/* 🔥 AFFICHER BOUTON UNIQUEMENT POUR ADMIN */}
 {isAdmin && (
 <button
 onClick={() => {
@@ -146,6 +140,7 @@ const columnTasks = getTasksByStatus(column.id);
 
 return (
 <div key={column.id} className="flex flex-col">
+{/* Column Header */}
 <div className={`${column.color} rounded-t-lg p-4 border-b-2 border-gray-300`}>
 <div className="flex items-center justify-between">
 <h3 className="font-bold text-gray-900">{column.title}</h3>
@@ -155,6 +150,7 @@ return (
 </div>
 </div>
 
+{/* Column Content */}
 <div
 onDragOver={handleDragOver}
 onDrop={(e) => handleDrop(e, column.id)}
@@ -164,16 +160,91 @@ className="flex-1 bg-gray-50 rounded-b-lg p-4 min-h-[500px]"
 {columnTasks.map((task) => (
 <div
 key={task._id}
-draggable={isAdmin} // 🔒 Membres → pas draggable
+draggable
 onDragStart={(e) => handleDragStart(e, task)}
 onClick={() => handleTaskClick(task)}
 className={`bg-white rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow cursor-pointer border-l-4 ${getPriorityColor(task.priority)} ${
 draggedTask?._id === task._id ? 'opacity-50' : ''
 }`}
 >
-<h4 className="font-semibold text-gray-900 mb-2">
-{task.title}
-</h4>
+{/* Task Title */}
+<h4 className="font-semibold text-gray-900 mb-2">{task.title}</h4>
+
+{/* Project Badge */}
+{task.project && (
+<div className="flex items-center mb-2">
+<div
+className="w-2 h-2 rounded-full mr-2"
+style={{ backgroundColor: task.project.color }}
+/>
+<span className="text-xs text-gray-600">
+{task.project.name}
+</span>
+</div>
+)}
+
+{/* Task Description */}
+{task.description && (
+<p className="text-sm text-gray-600 mb-3 line-clamp-2">
+{task.description}
+</p>
+)}
+
+{/* Task Meta */}
+<div className="flex items-center justify-between">
+<div className="flex items-center space-x-2">
+<span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-700">
+{task.priority}
+</span>
+
+{task.subtasks && task.subtasks.length > 0 && (
+<span className="text-xs px-2 py-1 rounded bg-indigo-100 text-indigo-800">
+✓ {task.subtasks.filter((st) => st.isCompleted).length}/{task.subtasks.length}
+</span>
+)}
+</div>
+
+{task.assignedTo && task.assignedTo.length > 0 && (
+<div className="flex -space-x-2">
+{task.assignedTo.slice(0, 3).map((user, index) => (
+<div
+key={user._id || index}
+className="w-6 h-6 rounded-full bg-primary-600 flex items-center justify-center text-white text-xs font-semibold border-2 border-white"
+title={`${user.firstName} ${user.lastName}`}
+>
+{user.firstName?.charAt(0)}
+{user.lastName?.charAt(0)}
+</div>
+))}
+{task.assignedTo.length > 3 && (
+<div className="w-6 h-6 rounded-full bg-gray-300 flex items-center justify-center text-gray-700 text-xs font-semibold border-2 border-white">
++{task.assignedTo.length - 3}
+</div>
+)}
+</div>
+)}
+</div>
+
+{/* Due Date */}
+{task.dueDate && (
+<div className="mt-3 pt-3 border-t border-gray-200">
+<div className="flex items-center text-xs text-gray-500">
+<span>📅</span>
+<span className="ml-1">
+{new Date(task.dueDate).toLocaleDateString('fr-FR', {
+day: 'numeric',
+month: 'short',
+})}
+</span>
+{new Date(task.dueDate) < new Date() &&
+task.status !== 'completed' && (
+<span className="ml-2 text-red-600 font-semibold">
+En retard
+</span>
+)}
+</div>
+</div>
+)}
 </div>
 ))}
 
