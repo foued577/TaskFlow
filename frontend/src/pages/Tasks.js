@@ -75,15 +75,18 @@ Object.keys(query).forEach((key) => {
 if (!query[key]) delete query[key];
 });
 
+// ⭐ Correction du filtre "en retard"
+if (filters.status === "overdue") {
+query.overdue = true;
+delete query.status;
+}
+
 // Special filters
 if (taskView === "assigned") query.filterType = "assignedToMe";
 if (taskView === "created_not_assigned")
 query.filterType = "createdByMeNotAssignedToMe";
 
-const tasksRes = isOverdueMode
-? await tasksAPI.getOverdue()
-: await tasksAPI.getAll(query);
-
+const tasksRes = await tasksAPI.getAll(query);
 const projectsRes = await projectsAPI.getAll();
 
 let fetchedTasks = tasksRes.data.data;
@@ -231,7 +234,6 @@ Créées par moi non assignées
 
 {/* CLASSIC FILTERS */}
 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-
 {/* PROJECT */}
 <div>
 <label className="block text-sm mb-2">Projet</label>
@@ -268,9 +270,7 @@ status: e.target.value,
 className="input"
 >
 <option value="">Tous</option>
-<option value="not_started">
-Non démarrée
-</option>
+<option value="not_started">Non démarrée</option>
 <option value="in_progress">En cours</option>
 <option value="completed">Terminée</option>
 <option value="overdue">En retard</option>
@@ -299,7 +299,6 @@ className="input"
 <option value="urgent">Urgente</option>
 </select>
 </div>
-
 </div>
 </div>
 )}
@@ -363,11 +362,15 @@ className="w-7 h-7 flex items-center justify-center rounded-full bg-purple-100 t
 <div className="flex gap-2 mt-3">
 <span
 className={`badge ${getStatusColor(
-isOverdue ? "overdue" : task.status
+isOverdue
+? "overdue"
+: task.status
 )}`}
 >
 {getStatusLabel(
-isOverdue ? "overdue" : task.status
+isOverdue
+? "overdue"
+: task.status
 )}
 </span>
 
