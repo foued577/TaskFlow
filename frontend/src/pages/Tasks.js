@@ -1,136 +1,251 @@
+// 🚀 FILE: src/pages/Tasks.js — VERSION FINALE & COMPLÈTE
+
 import React, { useState, useEffect } from "react";
-import { X, Plus, Trash2 } from "lucide-react";
-import { usersAPI, teamsAPI } from "../utils/api";
+import { useLocation } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { tasksAPI, projectsAPI } from "../utils/api";
 import { toast } from "react-toastify";
+import {
+CheckSquare,
+Plus,
+Filter,
+Calendar as CalendarIcon,
+AlertCircle,
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import Loading from "../components/Loading";
+import TaskModal from "../components/TaskModal";
+import { format } from "date-fns";
+import { fr } from "date-fns/locale";
 
-const TaskModal = ({ task, projects, onClose, onSave }) => {
-const isEdit = Boolean(task);
+const Tasks = () => {
+const location = useLocation();
+const { user } = useAuth();
 
-const [teams, setTeams] = useState([]);
+// ROLE GLOBAL
+const isAdmin = !user?.role || user.role === "admin";
 
-const [formData, setFormData] = useState({
-title: "",
-description: "",
+// UI STATE
+const [tasks, setTasks] = useState([]);
+const [projects, setProjects] = useState([]);
+const [loading, setLoading] = useState(true);
+
+// MODAL
+const [showModal, setShowModal] = useState(false);
+const [selectedTask, setSelectedTask] = useState(null);
+
+// FILTERS
+const [taskView, setTaskView] = useState("all");
+const [filters, setFilters] = useState({
 projectId: "",
-assignedTo: [],
-dueDate: "",
-priority: "medium",
-status: "not_started",
-tags: "",
-subtasks: [],
+status: "",
+priority: "",
 });
 
-// Load teams for assignment
+const [isOverdueMode, setIsOverdueMode] = useState(false);
+
+// Detect parameters (?status=overdue)
 useEffect(() => {
-const loadTeams = async () => {
+const params = new URLSearchParams(location.search);
+const statusParam = params.get("status");
+
+setIsOverdueMode(statusParam === "overdue");
+
+setFilters({
+projectId: "",
+status:
+statusParam && statusParam !== "overdue"
+? statusParam
+: "",
+priority: "",
+});
+}, [location.search]);
+
+// Load data
+useEffect(() => {
+loadData();
+}, [filters, isOverdueMode, taskView, location.search]);
+
+const loadData = async () => {
 try {
-const res = await teamsAPI.getAll();
-setTeams(res.data.data);
-} catch (err) {
-toast.error("Erreur lors du chargement des équipes");
-}
-};
-loadTeams();
-}, []);
+setLoading(true);
 
-// Load task into form
-useEffect(() => {
-if (task) {
-setFormData({
-title: task.title || "",
-description: task.description || "",
-projectId: task.project?._id || "",
-assignedTo: task.assignedTo?.map((u) => u._id) || [],
-dueDate: task.dueDate ? task.dueDate.split("T")[0] : "",
-priority: task.priority || "medium",
-status: task.status || "not_started",
-tags: task.tags?.join(", ") || "",
-subtasks: task.subtasks || [],
+let query = { ...filters };
+Object.keys(query).forEach((key) => {
+if (!query[key]) delete query[key];
 });
+
+// Special filters
+if (taskView === "assigned") query.filterType = "assignedToMe";
+if (taskView === "created_not_assigned")
+query.filterType = "createdByMeNotAssignedToMe";
+
+const tasksRes = isOverdueMode
+? await tasksAPI.getOverdue()
+: await tasksAPI.getAll(query);
+
+const projectsRes = await projectsAPI.getAll();
+
+let fetchedTasks = tasksRes.data.data;
+
+// TRI IDENTIQUE
+fetchedTasks = fetchedTasks.sort((a, b) => {
+const dateA = a.dueDate ? new Date(a.dueDate) : null;
+const dateB = b.dueDate ? new Date(b.dueDate) : null;
+
+if (dateA && dateB) return dateA - dateB;
+if (dateA && !dateB) return -1;
+if (!dateA && dateB) return 1;
+
+return a.title.localeCompare(b.title, "fr", {
+sensitivity: "base",
+});
+});
+
+setTasks(fetchedTasks);
+setProjects(projectsRes.data.data);
+} catch {
+toast.error("Erreur lors du chargement des tâches");
+} finally {
+setLoading(false);
 }
-}, [task]);
-
-const updateField = (field, value) => {
-setFormData((prev) => ({ ...prev, [field]: value }));
 };
 
-// SUBTASKS
-const addSubtask = () => {
-setFormData((prev) => ({
-...prev,
-subtasks: [...prev.subtasks, { title: "", isCompleted: false }],
-}));
+// CLICK ON TASK
+const handleTaskClick = (task) => {
+if (!isAdmin) return;
+setSelectedTask(task);
+setShowModal(true);
 };
 
-const updateSubtask = (index, key, value) => {
-const newList = [...formData.subtasks];
-newList[index][key] = value;
-setFormData((prev) => ({ ...prev, subtasks: newList }));
+const handleTaskUpdate = async () => {
+await loadData();
+setShowModal(false);
+setSelectedTask(null);
 };
 
-const removeSubtask = (index) => {
-const newList = formData.subtasks.filter((_, i) => i !== index);
-setFormData((prev) => ({ ...prev, subtasks: newList }));
-};
-
-const handleSubmit = async (e) => {
-e.preventDefault();
-
-if (!formData.title.trim()) {
-toast.error("Le titre est obligatoire");
+const updateTaskStatus = async (taskId, newStatus) => {
+if (!isAdmin) {
+toast.error("Vous n’avez pas les droits");
 return;
 }
 
-const payload = {
-...formData,
-tags: formData.tags
-? formData.tags.split(",").map((t) => t.trim()).filter(Boolean)
-: [],
+try {
+await tasksAPI.update(taskId, { status: newStatus });
+toast.success("Statut mis à jour");
+loadData();
+} catch {
+toast.error("Erreur lors du changement de statut");
+}
 };
 
-await onSave(payload);
-};
+// COLORS
+const getPriorityColor = (priority) =>
+({
+low: "bg-blue-100 text-blue-800",
+medium: "bg-yellow-100 text-yellow-800",
+high: "bg-orange-100 text-orange-800",
+urgent: "bg-red-100 text-red-800",
+}[priority] || "bg-gray-100 text-gray-800");
+
+const getStatusColor = (status) =>
+({
+not_started: "bg-gray-100 text-gray-800",
+in_progress: "bg-blue-100 text-blue-800",
+completed: "bg-green-100 text-green-800",
+overdue: "bg-red-100 text-red-800",
+}[status] || "bg-gray-100 text-gray-800");
+
+const getStatusLabel = (status) =>
+({
+not_started: "Non démarrée",
+in_progress: "En cours",
+completed: "Terminée",
+overdue: "En retard",
+}[status] || status);
+
+if (loading) return <Loading fullScreen={false} />;
 
 return (
-<div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
-<div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-
+<div>
 {/* HEADER */}
-<div className="flex items-center justify-between mb-4">
-<h2 className="text-xl font-bold">
-{isEdit ? "Modifier la tâche" : "Nouvelle tâche"}
-</h2>
+<div className="flex items-center justify-between mb-6">
+<h1 className="text-2xl font-bold text-gray-900">
+{isOverdueMode ? "Tâches en retard" : "Tâches"}
+</h1>
+
+{isAdmin && (
 <button
-onClick={onClose}
-className="text-gray-400 hover:text-gray-600"
+onClick={() => {
+setSelectedTask(null);
+setShowModal(true);
+}}
+className="btn btn-primary flex items-center"
 >
-<X className="w-6 h-6" />
+<Plus className="w-5 h-5 mr-2" /> Nouvelle tâche
+</button>
+)}
+</div>
+
+{/* FILTERS */}
+{!isOverdueMode && (
+<div className="card mb-6 p-4">
+<div className="flex items-center mb-4">
+<Filter className="w-5 h-5 mr-2 text-gray-600" />
+<h3 className="text-lg font-semibold text-gray-900">
+Filtres
+</h3>
+</div>
+
+{/* Task view */}
+<div className="flex gap-2 mb-4">
+<button
+className={`btn ${
+taskView === "all" ? "btn-primary" : "btn-light"
+}`}
+onClick={() => setTaskView("all")}
+>
+Toutes les tâches
+</button>
+
+<button
+className={`btn ${
+taskView === "assigned" ? "btn-primary" : "btn-light"
+}`}
+onClick={() => setTaskView("assigned")}
+>
+Assignées à moi
+</button>
+
+<button
+className={`btn ${
+taskView === "created_not_assigned"
+? "btn-primary"
+: "btn-light"
+}`}
+onClick={() => setTaskView("created_not_assigned")}
+>
+Créées par moi non assignées
 </button>
 </div>
 
-<form onSubmit={handleSubmit} className="space-y-4">
-
-{/* TITLE */}
-<div>
-<label className="block text-sm mb-2 font-medium">Titre</label>
-<input
-type="text"
-className="input"
-value={formData.title}
-onChange={(e) => updateField("title", e.target.value)}
-required
-/>
-</div>
+{/* CLASSIC FILTERS */}
+<div className="grid grid-cols-1 md:grid-cols-4 gap-4">
 
 {/* PROJECT */}
 <div>
-<label className="block text-sm font-medium mb-2">Projet</label>
+<label className="block text-sm mb-2">Projet</label>
 <select
+value={filters.projectId}
+onChange={(e) =>
+setFilters({
+...filters,
+projectId: e.target.value,
+})
+}
 className="input"
-value={formData.projectId}
-onChange={(e) => updateField("projectId", e.target.value)}
 >
-<option value="">Sélectionner...</option>
+<option value="">Tous les projets</option>
 {projects.map((p) => (
 <option key={p._id} value={p._id}>
 {p.name}
@@ -139,82 +254,45 @@ onChange={(e) => updateField("projectId", e.target.value)}
 </select>
 </div>
 
-{/* ASSIGNED USERS */}
+{/* STATUS */}
 <div>
-<label className="block text-sm font-medium mb-2">
-Utilisateurs assignés
-</label>
-
-<div className="border p-3 rounded-lg max-h-40 overflow-y-auto space-y-1">
-{teams.map((team) =>
-team.members.map((m) => (
-<label
-key={m.user._id}
-className="flex items-center gap-2 text-sm"
+<label className="block text-sm mb-2">Statut</label>
+<select
+value={filters.status}
+onChange={(e) =>
+setFilters({
+...filters,
+status: e.target.value,
+})
+}
+className="input"
 >
-<input
-type="checkbox"
-checked={formData.assignedTo.includes(m.user._id)}
-onChange={() => {
-const exists = formData.assignedTo.includes(
-m.user._id
-);
-updateField(
-"assignedTo",
-exists
-? formData.assignedTo.filter(
-(id) => id !== m.user._id
-)
-: [...formData.assignedTo, m.user._id]
-);
-}}
-/>
-
-<span>
-{m.user.firstName} {m.user.lastName}
-</span>
-</label>
-))
-)}
-</div>
-</div>
-
-{/* DESCRIPTION */}
-<div>
-<label className="block text-sm font-medium mb-2">
-Description
-</label>
-<textarea
-className="input"
-rows={3}
-value={formData.description}
-onChange={(e) => updateField("description", e.target.value)}
-/>
-</div>
-
-{/* DUE DATE */}
-<div>
-<label className="block text-sm mb-2 font-medium">
-Date limite
-</label>
-<input
-type="date"
-className="input"
-value={formData.dueDate}
-onChange={(e) => updateField("dueDate", e.target.value)}
-/>
+<option value="">Tous</option>
+<option value="not_started">
+Non démarrée
+</option>
+<option value="in_progress">En cours</option>
+<option value="completed">Terminée</option>
+<option value="overdue">En retard</option>
+</select>
 </div>
 
 {/* PRIORITY */}
 <div>
-<label className="block text-sm font-medium mb-2">
+<label className="block text-sm mb-2">
 Priorité
 </label>
 <select
+value={filters.priority}
+onChange={(e) =>
+setFilters({
+...filters,
+priority: e.target.value,
+})
+}
 className="input"
-value={formData.priority}
-onChange={(e) => updateField("priority", e.target.value)}
 >
+<option value="">Toutes</option>
 <option value="low">Basse</option>
 <option value="medium">Moyenne</option>
 <option value="high">Haute</option>
@@ -222,95 +300,154 @@ onChange={(e) => updateField("priority", e.target.value)}
 </select>
 </div>
 
-{/* STATUS */}
-<div>
-<label className="block text-sm font-medium mb-2">Statut</label>
-<select
-className="input"
-value={formData.status}
-onChange={(e) => updateField("status", e.target.value)}
->
-<option value="not_started">Non commencée</option>
-<option value="in_progress">En cours</option>
-<option value="completed">Terminée</option>
-</select>
 </div>
-
-{/* TAGS */}
-<div>
-<label className="block text-sm font-medium mb-2">
-Tags (séparés par des virgules)
-</label>
-<input
-type="text"
-className="input"
-value={formData.tags}
-onChange={(e) => updateField("tags", e.target.value)}
-placeholder="frontend, urgent, design"
-/>
 </div>
+)}
 
-{/* SUBTASKS */}
-<div>
-<label className="block text-sm font-medium mb-2">
-Sous-tâches
-</label>
-
-<div className="space-y-2">
-{formData.subtasks.map((st, index) => (
-<div
-key={index}
-className="flex items-center gap-2 border rounded-lg p-2"
->
-<input
-type="text"
-className="input flex-1"
-value={st.title}
-onChange={(e) =>
-updateSubtask(index, "title", e.target.value)
-}
-placeholder={`Sous-tâche ${index + 1}`}
-/>
-
-<button
-type="button"
-className="p-2 text-red-500 hover:bg-red-100 rounded-lg"
-onClick={() => removeSubtask(index)}
->
-<Trash2 className="w-4 h-4" />
-</button>
+{/* LIST */}
+{tasks.length === 0 ? (
+<div className="card text-center py-12">
+<CheckSquare className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+<h3 className="text-lg font-medium">
+Aucune tâche
+</h3>
 </div>
+) : (
+<div className="space-y-4">
+<AnimatePresence>
+{tasks.map((task) => {
+const isOverdue =
+task.dueDate &&
+new Date(task.dueDate) < new Date() &&
+task.status !== "completed";
+
+return (
+<motion.div
+key={task._id}
+initial={{ opacity: 0, y: 10 }}
+animate={{ opacity: 1, y: 0 }}
+exit={{ opacity: 0 }}
+transition={{ duration: 0.2 }}
+onClick={() => handleTaskClick(task)}
+className={`card hover:shadow-lg ${
+isAdmin
+? "cursor-pointer"
+: "cursor-default"
+}`}
+>
+<div className="flex items-start justify-between">
+<div className="flex-1">
+<h3 className="text-lg font-bold">
+{task.title}
+</h3>
+<p className="text-sm text-gray-600">
+{task.project?.name}
+</p>
+
+{/* ASSIGNED */}
+{task.assignedTo?.length > 0 && (
+<div className="flex items-center flex-wrap gap-2 mt-2">
+{task.assignedTo.map((u) => (
+<span
+key={u._id}
+className="w-7 h-7 flex items-center justify-center rounded-full bg-purple-100 text-purple-800 text-xs font-semibold"
+>
+{u.firstName[0]}
+{u.lastName[0]}
+</span>
 ))}
 </div>
+)}
 
-<button
-type="button"
-onClick={addSubtask}
-className="btn btn-light mt-3 flex items-center"
+{/* BADGES */}
+<div className="flex gap-2 mt-3">
+<span
+className={`badge ${getStatusColor(
+isOverdue ? "overdue" : task.status
+)}`}
 >
-<Plus className="w-4 h-4 mr-2" /> Ajouter une sous-tâche
-</button>
-</div>
+{getStatusLabel(
+isOverdue ? "overdue" : task.status
+)}
+</span>
 
-{/* ACTIONS */}
-<div className="flex gap-4 pt-4">
-<button type="submit" className="flex-1 btn btn-primary">
-{isEdit ? "Mettre à jour" : "Créer la tâche"}
-</button>
-
-<button
-type="button"
-onClick={onClose}
-className="flex-1 btn btn-secondary"
+<span
+className={`badge ${getPriorityColor(
+task.priority
+)}`}
 >
-Annuler
-</button>
+{task.priority}
+</span>
+
+{/* DATE LIMIT */}
+{task.dueDate && (
+<span
+className={`badge flex items-center ${
+isOverdue
+? "bg-red-100 text-red-800"
+: "bg-gray-100 text-gray-700"
+}`}
+>
+<CalendarIcon className="w-3 h-3 mr-1" />
+{format(
+new Date(task.dueDate),
+"dd MMM yyyy",
+{ locale: fr }
+)}
+{isOverdue && (
+<AlertCircle className="w-3 h-3 ml-1" />
+)}
+</span>
+)}
+</div>
 </div>
 
-</form>
+{/* ADMIN DROPDOWN */}
+{isAdmin && (
+<select
+value={task.status}
+onChange={(e) =>
+updateTaskStatus(
+task._id,
+e.target.value
+)
+}
+onClick={(e) => e.stopPropagation()}
+className="text-sm border rounded-lg px-2 py-1"
+>
+<option value="not_started">
+Non démarrée
+</option>
+<option value="in_progress">
+En cours
+</option>
+<option value="completed">
+Terminée
+</option>
+</select>
+)}
 </div>
+</motion.div>
+);
+})}
+</AnimatePresence>
+</div>
+)}
+
+{/* MODAL */}
+{showModal && isAdmin && (
+<TaskModal
+task={selectedTask}
+projects={projects}
+onClose={() => {
+setShowModal(false);
+setSelectedTask(null);
+}}
+onSave={handleTaskUpdate}
+/>
+)}
 </div>
 );
 };
 
-export default TaskModal;
+export default Tasks;
