@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Outlet, Link, useLocation } from "react-router-dom";
+import { Outlet, Link as RouterLink, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -17,7 +17,9 @@ X,
 Sun,
 Moon,
 Shield,
+Link as LinkIcon // ✅ AJOUT IMPORT ICÔNE
 } from "lucide-react";
+
 import NotificationDropdown from "./NotificationDropdown";
 
 const Layout = () => {
@@ -34,6 +36,9 @@ const navigation = [
 { name: "Kanban", path: "/kanban", icon: FolderKanban },
 { name: "Planning", path: "/calendar", icon: CalendarIcon },
 { name: "Exports Excel", path: "/export", icon: FileDown },
+
+// ✅ LIGNE AJOUTÉE — LIENS UTILES
+{ name: "Liens utiles", path: "/useful-links", icon: LinkIcon },
 ];
 
 if (user?.role === "admin") {
@@ -56,13 +61,12 @@ return (
 
 {/* SIDEBAR */}
 <aside className="hidden md:fixed md:inset-y-0 md:flex md:w-64 md:flex-col">
-<div className="flex flex-col flex-grow bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700">
+<div className="flex flex-col flex-grow bg-white dark:bg-gray-800 border-r">
 
 {/* LOGO */}
 <div className="flex items-center justify-between h-16 px-6 border-b">
-<h1 className="text-2xl font-bold text-primary-600 dark:text-primary-400">
-TaskFlow
-</h1>
+<h1 className="text-2xl font-bold text-primary-600 dark:text-primary-400">TaskFlow</h1>
+
 <button
 onClick={() => setTheme(theme === "light" ? "dark" : "light")}
 className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
@@ -80,7 +84,7 @@ className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
 {navigation.map((item) => {
 const Icon = item.icon;
 return (
-<Link
+<RouterLink
 key={item.path}
 to={item.path}
 className={`flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-all ${
@@ -91,7 +95,7 @@ isActive(item.path)
 >
 <Icon className="w-5 h-5 mr-3" />
 {item.name}
-</Link>
+</RouterLink>
 );
 })}
 </nav>
@@ -107,20 +111,19 @@ isActive(item.path)
 <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
 {user?.firstName} {user?.lastName}
 </p>
-<p className="text-xs text-gray-500 dark:text-gray-400">
-{user?.email}
-</p>
+<p className="text-xs text-gray-500 dark:text-gray-400">{user?.email}</p>
 </div>
 </div>
 
 <div className="flex space-x-2">
-<Link
+<RouterLink
 to="/profile"
 className="flex-1 px-3 py-2 text-sm bg-gray-100 dark:bg-gray-700 rounded-lg text-gray-700 dark:text-gray-200 flex items-center justify-center"
 >
 <User className="w-4 h-4 mr-2" />
 Profil
-</Link>
+</RouterLink>
+
 <button
 onClick={logout}
 className="flex-1 px-3 py-2 text-sm bg-red-50 dark:bg-red-900/30 rounded-lg text-red-700 flex items-center justify-center"
@@ -133,7 +136,7 @@ Sortir
 </div>
 </aside>
 
-{/* MOBILE + TOP HEADER */}
+{/* TOP HEADER */}
 <div className="md:pl-64">
 <header className="sticky top-0 z-10 bg-white dark:bg-gray-800 border-b">
 <div className="px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -146,7 +149,7 @@ onClick={() => setSidebarOpen(true)}
 <Menu className="w-6 h-6" />
 </button>
 
-{/* RIGHT SIDE ITEMS — NOTIFICATIONS NOW ON THE RIGHT */}
+{/* NOTIFICATIONS RIGHT SIDE */}
 <div className="flex items-center space-x-4 ml-auto">
 <NotificationDropdown />
 </div>
