@@ -1,12 +1,13 @@
 import React from "react";
 import {
- BrowserRouter as Router,
- Routes,
- Route,
- Navigate,
+BrowserRouter as Router,
+Routes,
+Route,
+Navigate,
 } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ToastContainer } from "react-toastify";
+
 // Pages
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -18,57 +19,64 @@ import Kanban from "./pages/Kanban";
 import Calendar from "./pages/Calendar";
 import Profile from "./pages/Profile";
 import Export from "./pages/Export";
-import UserManagement from "./pages/UserManagement"; // ✅ NEW PAGE
+import UserManagement from "./pages/UserManagement";
+import UsefulLinks from "./pages/UsefulLinks"; // ✅ AJOUTÉ
+
 // Components
 import Layout from "./components/Layout";
 import Loading from "./components/Loading";
-// Component: Protected route
+
+// Protected route
 const ProtectedRoute = ({ children }) => {
- const { user, loading } = useAuth();
- if (loading) return <Loading />;
- return user ? children : <Navigate to="/login" replace />;
+const { user, loading } = useAuth();
+if (loading) return <Loading />;
+return user ? children : <Navigate to="/login" replace />;
 };
-// Component: Admin only route
+
+// Admin only route
 const AdminRoute = ({ children }) => {
- const { user, loading } = useAuth();
- if (loading) return <Loading />;
- return user?.role === "admin" ? children : <Navigate to="/" replace />;
+const { user, loading } = useAuth();
+if (loading) return <Loading />;
+return user?.role === "admin" ? children : <Navigate to="/" replace />;
 };
-// Component: Public route
+
+// Public route
 const PublicRoute = ({ children }) => {
- const { user, loading } = useAuth();
- if (loading) return <Loading />;
- return !user ? children : <Navigate to="/" replace />;
+const { user, loading } = useAuth();
+if (loading) return <Loading />;
+return !user ? children : <Navigate to="/" replace />;
 };
+
 function AppRoutes() {
- return (
+return (
 <Router>
 <Routes>
-       {/* Public */}
+{/* PUBLIC */}
 <Route
-         path="/login"
-         element={
+path="/login"
+element={
 <PublicRoute>
 <Login />
 </PublicRoute>
-         }
-       />
+}
+/>
 <Route
-         path="/register"
-         element={
+path="/register"
+element={
 <PublicRoute>
 <Register />
 </PublicRoute>
-         }
-       />
-       {/* Protected layout */}
+}
+/>
+
+{/* PROTECTED LAYOUT */}
 <Route
-         path="/"
-         element={
+path="/"
+element={
 <ProtectedRoute>
 <Layout />
 </ProtectedRoute>
-         }
+}
 >
 <Route index element={<Dashboard />} />
 <Route path="teams" element={<Teams />} />
@@ -78,28 +86,35 @@ function AppRoutes() {
 <Route path="calendar" element={<Calendar />} />
 <Route path="export" element={<Export />} />
 <Route path="profile" element={<Profile />} />
-         {/* ADMIN ONLY */}
+
+{/* ⭐ ROUTE POUR LES LIENS UTILES */}
+<Route path="useful-links" element={<UsefulLinks />} />
+
+{/* ADMIN ONLY */}
 <Route
-           path="users"
-           element={
+path="users"
+element={
 <AdminRoute>
 <UserManagement />
 </AdminRoute>
-           }
-         />
+}
+/>
 </Route>
-       {/* Fallback */}
+
+{/* FALLBACK */}
 <Route path="*" element={<Navigate to="/" replace />} />
 </Routes>
 </Router>
- );
+);
 }
+
 function App() {
- return (
+return (
 <AuthProvider>
 <AppRoutes />
 <ToastContainer position="top-right" autoClose={3000} theme="light" />
 </AuthProvider>
- );
+);
 }
+
 export default App;
