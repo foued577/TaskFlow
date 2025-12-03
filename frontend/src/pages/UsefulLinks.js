@@ -20,7 +20,7 @@ url: "",
 assignedTo: [],
 });
 
-// LOAD DATA
+// Load links & users
 useEffect(() => {
 loadData();
 }, []);
@@ -48,13 +48,14 @@ await usefulLinksAPI.create(formData);
 toast.success("Lien ajouté");
 setShowModal(false);
 loadData();
-} catch {
-toast.error("Erreur lors de la création");
+} catch (error) {
+toast.error("Erreur lors de la création du lien");
 }
 };
 
 const deleteLink = async (id) => {
 if (!window.confirm("Supprimer ce lien ?")) return;
+
 try {
 await usefulLinksAPI.delete(id);
 toast.success("Lien supprimé");
@@ -68,7 +69,7 @@ if (loading) return <Loading />;
 
 return (
 <div className="space-y-6">
-{/* HEADER */}
+{/* Header */}
 <div className="flex items-center justify-between">
 <h1 className="text-2xl font-bold">Liens utiles</h1>
 
@@ -85,7 +86,10 @@ className="btn btn-primary flex items-center"
 {/* LIST */}
 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 {links.map((link) => (
-<div key={link._id} className="card hover:shadow p-4 flex justify-between">
+<div
+key={link._id}
+className="card hover:shadow-md p-4 flex justify-between"
+>
 <div>
 <h3 className="text-lg font-bold">{link.title}</h3>
 
@@ -99,6 +103,7 @@ className="text-primary-600 flex items-center mt-1"
 <ExternalLink className="w-4 h-4 ml-1" />
 </a>
 
+{/* USERS */}
 {link.assignedTo.length > 0 && (
 <div className="flex items-center gap-2 mt-2">
 <Users className="w-4 h-4 text-gray-500" />
@@ -114,6 +119,7 @@ className="badge bg-purple-100 text-purple-800"
 )}
 </div>
 
+{/* Delete button */}
 {isAdmin && (
 <button
 onClick={() => deleteLink(link._id)}
@@ -126,27 +132,24 @@ className="p-2 text-red-600 hover:bg-red-100 rounded-lg"
 ))}
 </div>
 
-{/* MODAL */}
+{/* ========================= MODAL ========================= */}
 {showModal && (
 <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
 <div className="bg-white rounded-lg p-6 w-full max-w-lg">
 <h2 className="text-xl font-bold mb-4">Ajouter un lien</h2>
 
 <form onSubmit={createLink} className="space-y-4">
-{/* TITLE */}
 <div>
-<label className="block text-sm mb-2 font-medium">Nom du lien</label>
+<label className="block text-sm mb-2 font-medium">Nom</label>
 <input
 className="input"
 value={formData.title}
 onChange={(e) =>
 setFormData({ ...formData, title: e.target.value })
 }
-required
 />
 </div>
 
-{/* URL */}
 <div>
 <label className="block text-sm mb-2 font-medium">URL</label>
 <input
@@ -155,17 +158,17 @@ value={formData.url}
 onChange={(e) =>
 setFormData({ ...formData, url: e.target.value })
 }
-required
 />
 </div>
 
-{/* ASSIGN USERS */}
+{/* USERS */}
 <div>
-<label className="block text-sm mb-2 font-medium">Assigné à</label>
-
+<label className="block text-sm mb-2 font-medium">
+Assigné à
+</label>
 <div className="border p-3 rounded-lg max-h-40 overflow-y-auto">
 {users.map((u) => (
-<label key={u._id} className="flex items-center gap-2 text-sm">
+<label key={u._id} className="flex items-center gap-2">
 <input
 type="checkbox"
 checked={formData.assignedTo.includes(u._id)}
@@ -184,7 +187,6 @@ assignedTo: prev.assignedTo.includes(u._id)
 </div>
 </div>
 
-{/* ACTIONS */}
 <div className="flex gap-3 pt-2">
 <button type="submit" className="btn btn-primary flex-1">
 Ajouter
