@@ -1,4 +1,3 @@
-// backend/models/UsefulLink.js
 const mongoose = require("mongoose");
 
 const usefulLinkSchema = new mongoose.Schema(
@@ -12,21 +11,19 @@ url: {
 type: String,
 required: true,
 },
-assignedUsers: [
+assignedTo: [
 {
 type: mongoose.Schema.Types.ObjectId,
 ref: "User",
-}
+},
 ],
 createdBy: {
 type: mongoose.Schema.Types.ObjectId,
 ref: "User",
 required: true,
-}
 },
-{
-timestamps: true,
-}
+},
+{ timestamps: true }
 );
 
 module.exports = mongoose.model("UsefulLink", usefulLinkSchema);
