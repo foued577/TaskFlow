@@ -170,10 +170,11 @@ params: { limit },
 };
 
 // ---------------------------------------------------------
-// ✅ USEFUL LINKS (AJOUT DEMANDÉ)
+// ✅ USEFUL LINKS (AJOUT : UPDATE ✔️)
 // ---------------------------------------------------------
 export const usefulLinksAPI = {
 getAll: () => api.get("/useful-links"),
 create: (data) => api.post("/useful-links", data),
+update: (id, data) => api.put(`/useful-links/${id}`, data), // ✔️ AJOUTÉ
 delete: (id) => api.delete(`/useful-links/${id}`),
 };
