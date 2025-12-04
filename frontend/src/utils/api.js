@@ -97,6 +97,7 @@ getUser: (id) => api.get(`/users/${id}`),
 create: (data) => api.post("/users", data),
 updateRole: (id, data) => api.put(`/users/${id}/role`, data),
 delete: (id) => api.delete(`/users/${id}`),
+getAll: () => api.get("/users"),
 };
 
 // TEAMS
@@ -105,8 +106,6 @@ getAll: () => api.get("/teams"),
 getOne: (id) => api.get(`/teams/${id}`),
 create: (data) => api.post("/teams", data),
 update: (id, data) => api.put(`/teams/${id}`, data),
-
-// ✅ LIGNE QUI MANQUAIT !
 delete: (id) => api.delete(`/teams/${id}`),
 
 addMember: (id, userId) => api.post(`/teams/${id}/members`, { userId }),
@@ -129,12 +128,16 @@ getOne: (id) => api.get(`/tasks/${id}`),
 create: (data) => api.post("/tasks", data),
 update: (id, data) => api.put(`/tasks/${id}`, data),
 delete: (id) => api.delete(`/tasks/${id}`),
+
 addSubtask: (id, title) => api.post(`/tasks/${id}/subtasks`, { title }),
-toggleSubtask: (id, subtaskId) => api.put(`/tasks/${id}/subtasks/${subtaskId}`),
+toggleSubtask: (id, subtaskId) =>
+api.put(`/tasks/${id}/subtasks/${subtaskId}`),
+
 uploadAttachment: (id, formData) =>
 api.post(`/tasks/${id}/attachments`, formData, {
 headers: { "Content-Type": "multipart/form-data" },
 }),
+
 getOverdue: () => api.get("/tasks/overdue"),
 };
 
@@ -164,4 +167,13 @@ getEntityHistory: (entityType, entityId, limit) =>
 api.get(`/history/${entityType}/${entityId}`, {
 params: { limit },
 }),
+};
+
+// ---------------------------------------------------------
+// ✅ USEFUL LINKS (AJOUT DEMANDÉ)
+// ---------------------------------------------------------
+export const usefulLinksAPI = {
+getAll: () => api.get("/useful-links"),
+create: (data) => api.post("/useful-links", data),
+delete: (id) => api.delete(`/useful-links/${id}`),
 };
