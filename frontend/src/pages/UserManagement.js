@@ -8,7 +8,7 @@ import {
   Loader2,
   Shield,
   Pencil,
-  X
+  X,
 } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -18,7 +18,7 @@ const UserManagement = () => {
   const [showForm, setShowForm] = useState(false);
   const [creating, setCreating] = useState(false);
 
-  // ✅ EDIT
+  // ✅ AJOUT ÉDITION
   const [showEdit, setShowEdit] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [editData, setEditData] = useState({
@@ -42,7 +42,7 @@ const UserManagement = () => {
   const fetchUsers = async () => {
     try {
       setLoadingUsers(true);
-      const res = await usersAPI.search("", null);
+      const res = await usersAPI.search("", null); // get all
       setUsers(res.data.data || []);
     } catch (err) {
       toast.error("Erreur de chargement des utilisateurs");
@@ -55,7 +55,7 @@ const UserManagement = () => {
   }, []);
 
   // ------------------------------------------
-  // CREATE USER
+  // CREATE NEW USER
   // ------------------------------------------
   const createUser = async (e) => {
     e.preventDefault();
@@ -79,7 +79,7 @@ const UserManagement = () => {
   };
 
   // ------------------------------------------
-  // UPDATE ROLE
+  // UPDATE USER ROLE
   // ------------------------------------------
   const changeRole = async (id, role) => {
     try {
@@ -106,7 +106,7 @@ const UserManagement = () => {
   };
 
   // ------------------------------------------
-  // OPEN EDIT MODAL
+  // ✅ OPEN EDIT MODAL
   // ------------------------------------------
   const openEdit = (u) => {
     setEditingUser(u);
@@ -120,7 +120,7 @@ const UserManagement = () => {
   };
 
   // ------------------------------------------
-  // UPDATE USER
+  // ✅ UPDATE USER
   // ------------------------------------------
   const updateUser = async (e) => {
     e.preventDefault();
@@ -139,25 +139,31 @@ const UserManagement = () => {
     <div className="space-y-8">
       {/* HEADER */}
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Gestion des utilisateurs</h1>
-
-        <button onClick={() => setShowForm(true)} className="btn btn-primary">
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+          Gestion des utilisateurs
+        </h1>
+        <button
+          onClick={() => setShowForm(true)}
+          className="btn btn-primary flex items-center"
+        >
           <UserPlus className="w-5 h-5 mr-2" />
           Ajouter un utilisateur
         </button>
       </div>
 
-      {/* EDIT MODAL ✅ */}
+      {/* ✅ EDIT MODAL */}
       {showEdit && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
         >
-          <div className="bg-white p-6 rounded-xl w-full max-w-md">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl w-full max-w-md shadow-xl">
             <div className="flex justify-between mb-4">
-              <h2 className="text-xl font-bold">Modifier utilisateur</h2>
-              <X onClick={() => setShowEdit(false)} className="cursor-pointer" />
+              <h2 className="text-lg font-bold">Modifier utilisateur</h2>
+              <button onClick={() => setShowEdit(false)}>
+                <X className="w-6 h-6" />
+              </button>
             </div>
 
             <form onSubmit={updateUser} className="space-y-4">
@@ -179,6 +185,7 @@ const UserManagement = () => {
               />
               <input
                 className="input w-full"
+                type="email"
                 placeholder="Email"
                 value={editData.email}
                 onChange={(e) =>
@@ -200,55 +207,180 @@ const UserManagement = () => {
         </motion.div>
       )}
 
+      {/* ADD USER FORM */}
+      {showForm && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white dark:bg-gray-800 shadow rounded-xl p-6"
+        >
+          <h2 className="text-xl font-semibold mb-4">Nouvel utilisateur</h2>
+          <form
+            onSubmit={createUser}
+            className="grid grid-cols-1 md:grid-cols-2 gap-4"
+          >
+            <input
+              className="input"
+              placeholder="Prénom"
+              required
+              value={formData.firstName}
+              onChange={(e) =>
+                setFormData({ ...formData, firstName: e.target.value })
+              }
+            />
+            <input
+              className="input"
+              placeholder="Nom"
+              required
+              value={formData.lastName}
+              onChange={(e) =>
+                setFormData({ ...formData, lastName: e.target.value })
+              }
+            />
+            <input
+              className="input md:col-span-2"
+              type="email"
+              placeholder="Email"
+              required
+              value={formData.email}
+              onChange={(e) =>
+                setFormData({ ...formData, email: e.target.value })
+              }
+            />
+            <input
+              className="input md:col-span-2"
+              type="password"
+              placeholder="Mot de passe"
+              required
+              value={formData.password}
+              onChange={(e) =>
+                setFormData({ ...formData, password: e.target.value })
+              }
+            />
+            <select
+              className="input"
+              value={formData.role}
+              onChange={(e) =>
+                setFormData({ ...formData, role: e.target.value })
+              }
+            >
+              <option value="member">Membre</option>
+              <option value="admin">Administrateur</option>
+            </select>
+
+            <div className="md:col-span-2 flex justify-end space-x-3">
+              <button
+                type="button"
+                onClick={() => setShowForm(false)}
+                className="btn border border-gray-400 dark:border-gray-600"
+              >
+                Annuler
+              </button>
+              <button
+                type="submit"
+                disabled={creating}
+                className="btn btn-primary flex items-center"
+              >
+                {creating ? (
+                  <>
+                    <Loader2 className="animate-spin h-5 w-5 mr-2" /> Création...
+                  </>
+                ) : (
+                  "Créer"
+                )}
+              </button>
+            </div>
+          </form>
+        </motion.div>
+      )}
+
       {/* USER LIST */}
-      <div className="bg-white shadow rounded-xl overflow-hidden">
+      <div className="bg-white dark:bg-gray-800 shadow rounded-xl overflow-hidden">
         <table className="min-w-full">
-          <thead className="bg-gray-100">
+          <thead className="bg-gray-100 dark:bg-gray-700">
             <tr>
-              <th className="px-6 py-3 text-left">Utilisateur</th>
-              <th className="px-6 py-3 text-left">Email</th>
-              <th className="px-6 py-3 text-left">Rôle</th>
-              <th className="px-6 py-3 text-right">Actions</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold">
+                Utilisateur
+              </th>
+              <th className="px-6 py-3 text-left text-sm font-semibold">Email</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold">Rôle</th>
+              <th className="px-6 py-3 text-right text-sm font-semibold">
+                Actions
+              </th>
             </tr>
           </thead>
-
           <tbody>
-            {users.map((u) => (
-              <tr key={u._id} className="border-t">
-                <td className="px-6 py-4">
-                  {u.firstName} {u.lastName}
-                </td>
-                <td className="px-6 py-4">{u.email}</td>
-                <td className="px-6 py-4">{u.role}</td>
-                <td className="px-6 py-4 flex justify-end gap-2">
-                  <button
-                    onClick={() => openEdit(u)}
-                    className="btn bg-yellow-500 text-white"
-                  >
-                    <Pencil className="w-4 h-4 mr-1" />
-                    Modifier
-                  </button>
-
-                  <button
-                    onClick={() =>
-                      changeRole(u._id, u.role === "admin" ? "member" : "admin")
-                    }
-                    className="btn border"
-                  >
-                    <Shield className="w-4 h-4 mr-1" />
-                    Changer rôle
-                  </button>
-
-                  <button
-                    onClick={() => deleteUser(u._id)}
-                    className="btn bg-red-600 text-white"
-                  >
-                    <Trash2 className="w-4 h-4 mr-1" />
-                    Supprimer
-                  </button>
+            {loadingUsers ? (
+              <tr>
+                <td colSpan="4" className="py-10 text-center">
+                  <Loader2 className="animate-spin w-8 h-8 mx-auto" />
                 </td>
               </tr>
-            ))}
+            ) : users.length === 0 ? (
+              <tr>
+                <td colSpan="4" className="py-10 text-center text-gray-500">
+                  Aucun utilisateur trouvé
+                </td>
+              </tr>
+            ) : (
+              users.map((u) => (
+                <tr
+                  key={u._id}
+                  className="border-t border-gray-200 dark:border-gray-700"
+                >
+                  <td className="px-6 py-4 font-medium">
+                    {u.firstName} {u.lastName}
+                  </td>
+                  <td className="px-6 py-4">{u.email}</td>
+                  <td className="px-6 py-4">
+                    <span
+                      className={`inline-flex items-center px-3 py-1 rounded-full text-sm ${
+                        u.role === "admin"
+                          ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"
+                          : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+                      }`}
+                    >
+                      <Shield className="w-4 h-4 mr-2" />
+                      {u.role}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 flex justify-end space-x-3">
+                    <button
+                      onClick={() => openEdit(u)}
+                      className="btn bg-yellow-500 text-white hover:bg-yellow-600 flex items-center"
+                    >
+                      <Pencil className="w-4 h-4 mr-2" />
+                      Modifier
+                    </button>
+
+                    {u.role === "member" ? (
+                      <button
+                        onClick={() => changeRole(u._id, "admin")}
+                        className="btn btn-primary flex items-center"
+                      >
+                        <ShieldCheck className="w-4 h-4 mr-2" />
+                        Rendre admin
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => changeRole(u._id, "member")}
+                        className="btn border border-gray-400 dark:border-gray-600 flex items-center"
+                      >
+                        <Shield className="w-4 h-4 mr-2" />
+                        Rendre membre
+                      </button>
+                    )}
+                    <button
+                      onClick={() => deleteUser(u._id)}
+                      className="btn bg-red-600 text-white hover:bg-red-700 flex items-center"
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Supprimer
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
