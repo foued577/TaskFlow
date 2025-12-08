@@ -25,6 +25,9 @@ const [projects, setProjects] = useState([]);
 const [teams, setTeams] = useState([]);
 const [loading, setLoading] = useState(true);
 
+// ✅ ✅ ✅ AJOUT RECHERCHE
+const [search, setSearch] = useState("");
+
 const [showModal, setShowModal] = useState(false);
 const [modalMode, setModalMode] = useState("create");
 const [selectedProject, setSelectedProject] = useState(null);
@@ -202,6 +205,11 @@ urgent: "bg-red-100 text-red-800",
 return colors[priority] || colors.medium;
 };
 
+// ✅ ✅ ✅ FILTRAGE TEMPS RÉEL PAR NOM
+const filteredProjects = projects.filter(project =>
+project.name.toLowerCase().includes(search.toLowerCase())
+);
+
 if (loading) return <Loading fullScreen={false} />;
 
 return (
@@ -210,6 +218,16 @@ return (
 <div className="flex items-center justify-between mb-6">
 <h1 className="text-2xl font-bold">Projets</h1>
 
+<div className="flex items-center gap-3">
+{/* ✅ ✅ ✅ INPUT RECHERCHE */}
+<input
+type="text"
+placeholder="Rechercher un projet..."
+className="input w-64"
+value={search}
+onChange={(e) => setSearch(e.target.value)}
+/>
+
 {isAdmin && (
 <button onClick={openCreateModal} className="btn btn-primary flex items-center">
 <Plus className="w-5 h-5 mr-2" />
@@ -217,16 +235,17 @@ Nouveau projet
 </button>
 )}
 </div>
+</div>
 
 {/* LISTE DES PROJETS */}
-{projects.length === 0 ? (
+{filteredProjects.length === 0 ? (
 <div className="card text-center py-12">
 <FolderKanban className="w-16 h-16 mx-auto mb-4 text-gray-300" />
 <h3 className="text-lg font-medium">Aucun projet</h3>
 </div>
 ) : (
 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-{projects.map((project) => {
+{filteredProjects.map((project) => {
 const projectTeams = project.teams || [];
 
 return (
