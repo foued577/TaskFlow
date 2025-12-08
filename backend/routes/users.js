@@ -2,9 +2,10 @@ const express = require("express");
 const router = express.Router();
 
 const {
-searchUsers,
-getUser,
-deleteUser
+  searchUsers,
+  getUser,
+  deleteUser,
+  updateUser
 } = require("../controllers/userController");
 
 const User = require("../models/User");
@@ -18,80 +19,83 @@ router.get("/:id", protect, getUser);
 
 // ➕ Create user (ADMIN ONLY)
 router.post("/", protect, adminOnly, async (req, res) => {
-try {
-const { firstName, lastName, email, password, role } = req.body;
+  try {
+    const { firstName, lastName, email, password, role } = req.body;
 
-if (!firstName || !lastName || !email || !password) {
-return res.status(400).json({
-success: false,
-message: "Missing required fields",
-});
-}
+    if (!firstName || !lastName || !email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required fields",
+      });
+    }
 
-const exists = await User.findOne({ email });
-if (exists) {
-return res.status(400).json({
-success: false,
-message: "User already exists",
-});
-}
+    const exists = await User.findOne({ email });
+    if (exists) {
+      return res.status(400).json({
+        success: false,
+        message: "User already exists",
+      });
+    }
 
-const user = await User.create({
-firstName,
-lastName,
-email,
-password,
-role: role || "member",
-});
+    const user = await User.create({
+      firstName,
+      lastName,
+      email,
+      password,
+      role: role || "member",
+    });
 
-res.status(201).json({
-success: true,
-data: user,
-});
-} catch (error) {
-console.error("Create user error:", error);
-res.status(500).json({
-success: false,
-message: "Error creating user",
-});
-}
+    res.status(201).json({
+      success: true,
+      data: user,
+    });
+  } catch (error) {
+    console.error("Create user error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error creating user",
+    });
+  }
 });
 
 // 🔄 Change user role (ADMIN ONLY)
 router.put("/:id/role", protect, adminOnly, async (req, res) => {
-try {
-const { role } = req.body;
+  try {
+    const { role } = req.body;
 
-if (!["admin", "member"].includes(role)) {
-return res.status(400).json({
-success: false,
-message: "Invalid role",
-});
-}
+    if (!["admin", "member"].includes(role)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid role",
+      });
+    }
 
-const user = await User.findById(req.params.id);
-if (!user) {
-return res.status(404).json({
-success: false,
-message: "User not found",
-});
-}
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
 
-user.role = role;
-await user.save();
+    user.role = role;
+    await user.save();
 
-res.status(200).json({
-success: true,
-data: user,
+    res.status(200).json({
+      success: true,
+      data: user,
+    });
+  } catch (error) {
+    console.error("Role update error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error updating role",
+    });
+  }
 });
-} catch (error) {
-console.error("Role update error:", error);
-res.status(500).json({
-success: false,
-message: "Error updating role",
-});
-}
-});
+
+// ✏️ UPDATE USER INFOS (ADMIN ONLY)
+router.put("/:id", protect, adminOnly, updateUser);
 
 // ❌ DELETE USER (ADMIN ONLY)
 router.delete("/:id", protect, adminOnly, deleteUser);
