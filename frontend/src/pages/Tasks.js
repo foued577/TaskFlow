@@ -30,6 +30,9 @@ const [tasks, setTasks] = useState([]);
 const [projects, setProjects] = useState([]);
 const [loading, setLoading] = useState(true);
 
+// ✅ ✅ ✅ AJOUT RECHERCHE
+const [search, setSearch] = useState("");
+
 // MODAL
 const [showModal, setShowModal] = useState(false);
 const [selectedTask, setSelectedTask] = useState(null);
@@ -114,6 +117,11 @@ setLoading(false);
 }
 };
 
+// ✅ ✅ ✅ FILTRAGE RECHERCHE TEMPS RÉEL
+const filteredTasks = tasks.filter(task =>
+task.title.toLowerCase().includes(search.toLowerCase())
+);
+
 // CLICK ON TASK
 const handleTaskClick = (task) => {
 if (!isAdmin) return;
@@ -177,6 +185,16 @@ return (
 {isOverdueMode ? "Tâches en retard" : "Tâches"}
 </h1>
 
+<div className="flex items-center gap-3">
+{/* ✅ ✅ ✅ INPUT RECHERCHE */}
+<input
+type="text"
+placeholder="Rechercher une tâche..."
+className="input w-64"
+value={search}
+onChange={(e) => setSearch(e.target.value)}
+/>
+
 {isAdmin && (
 <button
 onClick={() => {
@@ -189,6 +207,7 @@ className="btn btn-primary flex items-center"
 </button>
 )}
 </div>
+</div>
 
 {/* FILTERS */}
 {!isOverdueMode && (
@@ -200,7 +219,6 @@ Filtres
 </h3>
 </div>
 
-{/* Task view */}
 <div className="flex gap-2 mb-4">
 <button
 className={`btn ${
@@ -232,9 +250,7 @@ Créées par moi non assignées
 </button>
 </div>
 
-{/* CLASSIC FILTERS */}
 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-{/* PROJECT */}
 <div>
 <label className="block text-sm mb-2">Projet</label>
 <select
@@ -256,7 +272,6 @@ className="input"
 </select>
 </div>
 
-{/* STATUS */}
 <div>
 <label className="block text-sm mb-2">Statut</label>
 <select
@@ -277,7 +292,6 @@ className="input"
 </select>
 </div>
 
-{/* PRIORITY */}
 <div>
 <label className="block text-sm mb-2">
 Priorité
@@ -304,7 +318,7 @@ className="input"
 )}
 
 {/* LIST */}
-{tasks.length === 0 ? (
+{filteredTasks.length === 0 ? (
 <div className="card text-center py-12">
 <CheckSquare className="w-16 h-16 mx-auto mb-4 text-gray-300" />
 <h3 className="text-lg font-medium">
@@ -314,7 +328,7 @@ Aucune tâche
 ) : (
 <div className="space-y-4">
 <AnimatePresence>
-{tasks.map((task) => {
+{filteredTasks.map((task) => {
 const isOverdue =
 task.dueDate &&
 new Date(task.dueDate) < new Date() &&
@@ -343,7 +357,6 @@ isAdmin
 {task.project?.name}
 </p>
 
-{/* ASSIGNED */}
 {task.assignedTo?.length > 0 && (
 <div className="flex items-center flex-wrap gap-2 mt-2">
 {task.assignedTo.map((u) => (
@@ -358,7 +371,6 @@ className="w-7 h-7 flex items-center justify-center rounded-full bg-purple-100 t
 </div>
 )}
 
-{/* BADGES */}
 <div className="flex gap-2 mt-3">
 <span
 className={`badge ${getStatusColor(
@@ -382,7 +394,6 @@ task.priority
 {task.priority}
 </span>
 
-{/* DATE LIMIT */}
 {task.dueDate && (
 <span
 className={`badge flex items-center ${
@@ -405,7 +416,6 @@ new Date(task.dueDate),
 </div>
 </div>
 
-{/* ADMIN DROPDOWN */}
 {isAdmin && (
 <select
 value={task.status}
