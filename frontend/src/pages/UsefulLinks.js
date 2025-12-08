@@ -15,7 +15,7 @@ const UsefulLinks = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // ✅ AJOUT : RECHERCHE
+  // ✅ RECHERCHE
   const [search, setSearch] = useState("");
 
   const [showModal, setShowModal] = useState(false);
@@ -53,14 +53,19 @@ const UsefulLinks = () => {
     }
   };
 
-  // ✅ AJOUT : FILTRAGE RECHERCHE
+  // ✅ FILTRAGE + TRI ALPHABÉTIQUE PAR NOM DU LIEN
   const filteredLinks = useMemo(() => {
-    if (!search.trim()) return links;
+    const filtered = !search.trim()
+      ? links
+      : links.filter(
+          (link) =>
+            link.title.toLowerCase().includes(search.toLowerCase()) ||
+            link.url.toLowerCase().includes(search.toLowerCase())
+        );
 
-    return links.filter(
-      (link) =>
-        link.title.toLowerCase().includes(search.toLowerCase()) ||
-        link.url.toLowerCase().includes(search.toLowerCase())
+    // ✅ TRI A → Z SUR LE TITRE DU LIEN
+    return [...filtered].sort((a, b) =>
+      a.title.localeCompare(b.title, "fr", { sensitivity: "base" })
     );
   }, [search, links]);
 
@@ -182,24 +187,18 @@ const UsefulLinks = () => {
                   <ExternalLink className="w-4 h-4 ml-1" />
                 </a>
 
-                {/* ✅ UTILISATEURS ASSIGNÉS TRIÉS ALPHABÉTIQUEMENT */}
+                {/* UTILISATEURS ASSIGNÉS */}
                 {link.assignedTo && link.assignedTo.length > 0 && (
                   <div className="flex items-center gap-2 mt-2 flex-wrap">
                     <Users className="w-4 h-4 text-gray-500" />
-                    {[...link.assignedTo]
-                      .sort((a, b) =>
-                        `${a.firstName} ${a.lastName}`.localeCompare(
-                          `${b.firstName} ${b.lastName}`
-                        )
-                      )
-                      .map((u) => (
-                        <span
-                          key={u._id}
-                          className="badge bg-purple-100 text-purple-800"
-                        >
-                          {u.firstName} {u.lastName}
-                        </span>
-                      ))}
+                    {link.assignedTo.map((u) => (
+                      <span
+                        key={u._id}
+                        className="badge bg-purple-100 text-purple-800"
+                      >
+                        {u.firstName} {u.lastName}
+                      </span>
+                    ))}
                   </div>
                 )}
               </div>
@@ -274,34 +273,26 @@ const UsefulLinks = () => {
                   Assigné à
                 </label>
                 <div className="border p-3 rounded-lg max-h-40 overflow-y-auto space-y-1">
-                  {users
-                    .sort((a, b) =>
-                      `${a.firstName} ${a.lastName}`.localeCompare(
-                        `${b.firstName} ${b.lastName}`
-                      )
-                    )
-                    .map((u) => (
-                      <label
-                        key={u._id}
-                        className="flex items-center gap-2 text-sm"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={formData.assignedTo.includes(u._id)}
-                          onChange={() => {
-                            setFormData((prev) => ({
-                              ...prev,
-                              assignedTo: prev.assignedTo.includes(u._id)
-                                ? prev.assignedTo.filter(
-                                    (id) => id !== u._id
-                                  )
-                                : [...prev.assignedTo, u._id],
-                            }));
-                          }}
-                        />
-                        {u.firstName} {u.lastName}
-                      </label>
-                    ))}
+                  {users.map((u) => (
+                    <label
+                      key={u._id}
+                      className="flex items-center gap-2 text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={formData.assignedTo.includes(u._id)}
+                        onChange={() => {
+                          setFormData((prev) => ({
+                            ...prev,
+                            assignedTo: prev.assignedTo.includes(u._id)
+                              ? prev.assignedTo.filter((id) => id !== u._id)
+                              : [...prev.assignedTo, u._id],
+                          }));
+                        }}
+                      />
+                      {u.firstName} {u.lastName}
+                    </label>
+                  ))}
                   {users.length === 0 && (
                     <p className="text-xs text-gray-400">
                       Aucun utilisateur trouvé.
