@@ -48,6 +48,13 @@ type: String,
 enum: ['not_started', 'in_progress', 'completed'],
 default: 'not_started'
 },
+
+// ✅ ✅ ✅ AJOUT ARCHIVE
+archived: {
+type: Boolean,
+default: false
+},
+
 priority: {
 type: String,
 enum: ['low', 'medium', 'high', 'urgent'],
@@ -70,22 +77,6 @@ completedAt: {
 type: Date,
 default: null
 },
-
-// ✅ ✅ ✅ AJOUT ARCHIVE (NE CHANGE RIEN D’AUTRE)
-isArchived: {
-type: Boolean,
-default: false
-},
-archivedAt: {
-type: Date,
-default: null
-},
-archivedBy: {
-type: mongoose.Schema.Types.ObjectId,
-ref: 'User',
-default: null
-},
-
 subtasks: [subtaskSchema],
 attachments: [{
 filename: String,
@@ -130,10 +121,9 @@ taskSchema.index({ assignedTo: 1 });
 taskSchema.index({ dueDate: 1 });
 taskSchema.index({ parentTask: 1 });
 
-// ✅ index archive
-taskSchema.index({ isArchived: 1, createdAt: -1 });
+// ✅ ✅ ✅ INDEX ARCHIVE
+taskSchema.index({ archived: 1 });
 
-// Calculate completion percentage
 taskSchema.virtual('completionPercentage').get(function() {
 if (this.subtasks.length === 0) {
 return this.status === 'completed' ? 100 : 0;
@@ -142,7 +132,6 @@ const completed = this.subtasks.filter(st => st.isCompleted).length;
 return Math.round((completed / this.subtasks.length) * 100);
 });
 
-// Check if task is overdue
 taskSchema.virtual('isOverdue').get(function() {
 if (!this.dueDate || this.status === 'completed') return false;
 return new Date() > this.dueDate;
