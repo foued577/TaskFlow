@@ -5,291 +5,306 @@ const Project = require('../models/Project');
 // GET ALL TASKS
 // =====================================================
 exports.getTasks = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const role = req.user.role || 'admin';
-    let filters = {};
-    let q = { ...req.query };
+try {
+const userId = req.user.id;
+const role = req.user.role || 'admin';
+let filters = {};
+let q = { ...req.query };
 
-    // Remove empty filters
-    Object.keys(q).forEach((k) => {
-      if (!q[k]) delete q[k];
-    });
+// Remove empty filters
+Object.keys(q).forEach((k) => {
+if (!q[k]) delete q[k];
+});
 
-    if (q.status) filters.status = q.status;
-    if (q.priority) filters.priority = q.priority;
-    if (q.projectId) filters.project = q.projectId;
+// ✅ ARCHIVE FILTER (AJOUT)
+// Par défaut: on ne renvoie PAS les tâches archivées
+// Pour voir les archives: ?archived=true
+if (q.archived === 'true') {
+filters.isArchived = true;
+} else {
+filters.isArchived = false;
+}
+// ✅ FIN AJOUT
 
-    // Role filtering
-    if (role !== 'admin') {
-      filters.$or = [
-        { assignedTo: userId },
-        { createdBy: userId }
-      ];
-    }
+if (q.status) filters.status = q.status;
+if (q.priority) filters.priority = q.priority;
+if (q.projectId) filters.project = q.projectId;
 
-    if (q.filterType === 'assignedToMe') {
-      filters.assignedTo = userId;
-    }
+// Role filtering
+if (role !== 'admin') {
+filters.$or = [
+{ assignedTo: userId },
+{ createdBy: userId }
+];
+}
 
-    if (q.filterType === 'createdByMeNotAssignedToMe') {
-      filters.createdBy = userId;
-      filters.assignedTo = { $ne: userId };
-    }
+if (q.filterType === 'assignedToMe') {
+filters.assignedTo = userId;
+}
 
-    const tasks = await Task.find(filters)
-      .populate('assignedTo', 'firstName lastName email')
-      .populate('project', 'name color')
-      .sort({ createdAt: -1 });
+if (q.filterType === 'createdByMeNotAssignedToMe') {
+filters.createdBy = userId;
+filters.assignedTo = { $ne: userId };
+}
 
-    res.status(200).json({ success: true, data: tasks });
+const tasks = await Task.find(filters)
+.populate('assignedTo', 'firstName lastName email')
+.populate('project', 'name color')
+.sort({ createdAt: -1 });
 
-  } catch (err) {
-    res.status(500).json({ success: false, message: 'Error fetching tasks', error: err.message });
-  }
+res.status(200).json({ success: true, data: tasks });
+
+} catch (err) {
+res.status(500).json({ success: false, message: 'Error fetching tasks', error: err.message });
+}
 };
 
 // =====================================================
 // GET ONE TASK
 // =====================================================
 exports.getTask = async (req, res) => {
-  try {
-    const task = await Task.findById(req.params.id)
-      .populate('assignedTo', 'firstName lastName email')
-      .populate('project', 'name color');
+try {
+const task = await Task.findById(req.params.id)
+.populate('assignedTo', 'firstName lastName email')
+.populate('project', 'name color');
 
-    if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
+if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
 
-    if (req.user.role !== 'admin') {
-      const isAssigned = task.assignedTo.some(u => u.toString() === req.user.id);
-      const isCreator = task.createdBy.toString() === req.user.id;
+if (req.user.role !== 'admin') {
+const isAssigned = task.assignedTo.some(u => u.toString() === req.user.id);
+const isCreator = task.createdBy.toString() === req.user.id;
 
-      if (!isAssigned && !isCreator) {
-        return res.status(403).json({ success: false, message: 'Not authorized' });
-      }
-    }
+if (!isAssigned && !isCreator) {
+return res.status(403).json({ success: false, message: 'Not authorized' });
+}
+}
 
-    res.status(200).json({ success: true, data: task });
+res.status(200).json({ success: true, data: task });
 
-  } catch (err) {
-    res.status(500).json({ success: false, message: 'Error fetching task', error: err.message });
-  }
+} catch (err) {
+res.status(500).json({ success: false, message: 'Error fetching task', error: err.message });
+}
 };
 
 // =====================================================
 // CREATE TASK
 // =====================================================
 exports.createTask = async (req, res) => {
-  try {
-    const { title, description, projectId, assignedTo, priority, status, dueDate } = req.body;
+try {
+const { title, description, projectId, assignedTo, priority, status, dueDate } = req.body;
 
-    const project = await Project.findById(projectId);
-    if (!project) {
-      return res.status(404).json({ success: false, message: 'Project not found' });
-    }
+const project = await Project.findById(projectId);
+if (!project) {
+return res.status(404).json({ success: false, message: 'Project not found' });
+}
 
-    if (req.user.role !== 'admin') {
-      const userTeamIds = req.user.teams?.map(t => t.toString()) || [];
-      const projectTeams = project.teams?.map(t => t.toString()) || [];
+if (req.user.role !== 'admin') {
+const userTeamIds = req.user.teams?.map(t => t.toString()) || [];
+const projectTeams = project.teams?.map(t => t.toString()) || [];
 
-      const allowed = projectTeams.some(t => userTeamIds.includes(t));
-      if (!allowed) {
-        return res.status(403).json({
-          success: false,
-          message: 'Not authorized to create a task in this project'
-        });
-      }
-    }
+const allowed = projectTeams.some(t => userTeamIds.includes(t));
+if (!allowed) {
+return res.status(403).json({
+success: false,
+message: 'Not authorized to create a task in this project'
+});
+}
+}
 
-    const task = await Task.create({
-      title,
-      description,
-      project: projectId,
-      assignedTo,
-      priority,
-      status,
-      dueDate,
-      createdBy: req.user.id
-    });
+const task = await Task.create({
+title,
+description,
+project: projectId,
+assignedTo,
+priority,
+status,
+dueDate,
+createdBy: req.user.id
+// ✅ PAS BESOIN D’AJOUTER isArchived ICI SI DEFAULT = false DANS LE MODEL
+});
 
-    res.status(201).json({ success: true, data: task });
+res.status(201).json({ success: true, data: task });
 
-  } catch (err) {
-    res.status(500).json({ success: false, message: 'Error creating task', error: err.message });
-  }
+} catch (err) {
+res.status(500).json({ success: false, message: 'Error creating task', error: err.message });
+}
 };
 
 // =====================================================
 // UPDATE TASK
 // =====================================================
 exports.updateTask = async (req, res) => {
-  try {
-    const updates = { ...req.body };
+try {
+const updates = { ...req.body };
 
-    const task = await Task.findById(req.params.id);
-    if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
+const task = await Task.findById(req.params.id);
+if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
 
-    if (req.user.role !== 'admin') {
-      const isAssigned = task.assignedTo.some(u => u.toString() === req.user.id);
-      const isCreator = task.createdBy.toString() === req.user.id;
+if (req.user.role !== 'admin') {
+const isAssigned = task.assignedTo.some(u => u.toString() === req.user.id);
+const isCreator = task.createdBy.toString() === req.user.id;
 
-      if (!isAssigned && !isCreator) {
-        return res.status(403).json({ success: false, message: 'Not authorized' });
-      }
-    }
+if (!isAssigned && !isCreator) {
+return res.status(403).json({ success: false, message: 'Not authorized' });
+}
+}
 
-    Object.assign(task, updates);
-    await task.save();
+Object.assign(task, updates);
+await task.save();
 
-    res.status(200).json({ success: true, data: task });
+res.status(200).json({ success: true, data: task });
 
-  } catch (err) {
-    res.status(500).json({ success: false, message: 'Error updating task', error: err.message });
-  }
+} catch (err) {
+res.status(500).json({ success: false, message: 'Error updating task', error: err.message });
+}
 };
 
 // =====================================================
 // DELETE TASK
 // =====================================================
 exports.deleteTask = async (req, res) => {
-  try {
-    const task = await Task.findById(req.params.id);
-    if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
+try {
+const task = await Task.findById(req.params.id);
+if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
 
-    if (req.user.role !== 'admin' && task.createdBy.toString() !== req.user.id) {
-      return res.status(403).json({ success: false, message: 'Not authorized' });
-    }
+if (req.user.role !== 'admin' && task.createdBy.toString() !== req.user.id) {
+return res.status(403).json({ success: false, message: 'Not authorized' });
+}
 
-    await task.deleteOne();
+await task.deleteOne();
 
-    res.status(200).json({ success: true, message: 'Task deleted' });
+res.status(200).json({ success: true, message: 'Task deleted' });
 
-  } catch (err) {
-    res.status(500).json({ success: false, message: 'Error deleting task', error: err.message });
-  }
+} catch (err) {
+res.status(500).json({ success: false, message: 'Error deleting task', error: err.message });
+}
 };
 
 // =====================================================
 // ADD SUBTASK
 // =====================================================
 exports.addSubtask = async (req, res) => {
-  try {
-    const task = await Task.findById(req.params.id);
-    if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
+try {
+const task = await Task.findById(req.params.id);
+if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
 
-    const title = req.body.title;
-    if (!title) {
-      return res.status(400).json({ success: false, message: 'Subtask title required' });
-    }
+const title = req.body.title;
+if (!title) {
+return res.status(400).json({ success: false, message: 'Subtask title required' });
+}
 
-    task.subtasks.push({ title, completed: false });
-    await task.save();
+task.subtasks.push({ title, completed: false });
+await task.save();
 
-    res.status(200).json({ success: true, data: task });
+res.status(200).json({ success: true, data: task });
 
-  } catch (err) {
-    res.status(500).json({ success: false, message: 'Error adding subtask', error: err.message });
-  }
+} catch (err) {
+res.status(500).json({ success: false, message: 'Error adding subtask', error: err.message });
+}
 };
 
 // =====================================================
 // TOGGLE SUBTASK
 // =====================================================
 exports.toggleSubtask = async (req, res) => {
-  try {
-    const { id, subtaskId } = req.params;
+try {
+const { id, subtaskId } = req.params;
 
-    const task = await Task.findById(id);
-    if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
+const task = await Task.findById(id);
+if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
 
-    const subtask = task.subtasks.id(subtaskId);
-    if (!subtask) return res.status(404).json({ success: false, message: 'Subtask not found' });
+const subtask = task.subtasks.id(subtaskId);
+if (!subtask) return res.status(404).json({ success: false, message: 'Subtask not found' });
 
-    subtask.completed = !subtask.completed;
-    await task.save();
+subtask.completed = !subtask.completed;
+await task.save();
 
-    res.status(200).json({ success: true, data: task });
+res.status(200).json({ success: true, data: task });
 
-  } catch (err) {
-    res.status(500).json({
-      success: false,
-      message: 'Error toggling subtask',
-      error: err.message
-    });
-  }
+} catch (err) {
+res.status(500).json({
+success: false,
+message: 'Error toggling subtask',
+error: err.message
+});
+}
 };
 
 // =====================================================
 // UPLOAD ATTACHMENT
 // =====================================================
 exports.uploadAttachment = async (req, res) => {
-  try {
-    const task = await Task.findById(req.params.id);
-    if (!task) {
-      return res.status(404).json({ success: false, message: 'Task not found' });
-    }
+try {
+const task = await Task.findById(req.params.id);
+if (!task) {
+return res.status(404).json({ success: false, message: 'Task not found' });
+}
 
-    if (!req.file) {
-      return res.status(400).json({ success: false, message: 'No file uploaded' });
-    }
+if (!req.file) {
+return res.status(400).json({ success: false, message: 'No file uploaded' });
+}
 
-    const fileData = {
-      filename: req.file.filename,
-      originalName: req.file.originalname,
-      mimeType: req.file.mimetype,
-      size: req.file.size,
-      uploadedAt: new Date()
-    };
+const fileData = {
+filename: req.file.filename,
+originalName: req.file.originalname,
+mimeType: req.file.mimetype,
+size: req.file.size,
+uploadedAt: new Date()
+};
 
-    task.attachments.push(fileData);
-    await task.save();
+task.attachments.push(fileData);
+await task.save();
 
-    res.status(200).json({
-      success: true,
-      message: 'File uploaded successfully',
-      data: fileData
-    });
+res.status(200).json({
+success: true,
+message: 'File uploaded successfully',
+data: fileData
+});
 
-  } catch (err) {
-    res.status(500).json({
-      success: false,
-      message: 'Error uploading attachment',
-      error: err.message
-    });
-  }
+} catch (err) {
+res.status(500).json({
+success: false,
+message: 'Error uploading attachment',
+error: err.message
+});
+}
 };
 
 // =====================================================
 // GET OVERDUE TASKS
 // =====================================================
 exports.getOverdueTasks = async (req, res) => {
-  try {
-    const now = new Date();
+try {
+const now = new Date();
 
-    const filters = {
-      dueDate: { $lt: now },
-      status: { $ne: 'completed' }
-    };
+const filters = {
+dueDate: { $lt: now },
+status: { $ne: 'completed' }
+};
 
-    if (req.user.role !== 'admin') {
-      filters.assignedTo = req.user.id;
-    }
+// ✅ ARCHIVE FILTER (AJOUT) : on exclut les tâches archivées des "overdue"
+filters.isArchived = false;
+// ✅ FIN AJOUT
 
-    const tasks = await Task.find(filters)
-      .populate('assignedTo', 'firstName lastName email')
-      .populate('project', 'name');
+if (req.user.role !== 'admin') {
+filters.assignedTo = req.user.id;
+}
 
-    res.status(200).json({
-      success: true,
-      count: tasks.length,
-      data: tasks
-    });
+const tasks = await Task.find(filters)
+.populate('assignedTo', 'firstName lastName email')
+.populate('project', 'name');
 
-  } catch (err) {
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching overdue tasks',
-      error: err.message
-    });
-  }
+res.status(200).json({
+success: true,
+count: tasks.length,
+data: tasks
+});
+
+} catch (err) {
+res.status(500).json({
+success: false,
+message: 'Error fetching overdue tasks',
+error: err.message
+});
+}
 };
