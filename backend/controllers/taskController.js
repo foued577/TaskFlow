@@ -20,14 +20,10 @@ if (q.status) filters.status = q.status;
 if (q.priority) filters.priority = q.priority;
 if (q.projectId) filters.project = q.projectId;
 
-// ✅ AJOUT: par défaut on n’affiche PAS les tâches archivées
-// Pour afficher les archives: /tasks?archived=true
-if (q.archived !== undefined) {
-filters.isArchived = q.archived === 'true';
-} else {
-filters.isArchived = { $ne: true };
-}
-delete q.archived;
+// ✅ ✅ ✅ ARCHIVE FILTER (AJOUT)
+const showArchived =
+q.archived === 'true' || q.archived === true || q.isArchived === 'true' || q.isArchived === true;
+filters.isArchived = showArchived;
 
 // Role filtering
 if (role !== 'admin') {
@@ -158,59 +154,6 @@ res.status(500).json({ success: false, message: 'Error updating task', error: er
 };
 
 // =====================================================
-// ✅ ARCHIVE TASK (AJOUT)
-// =====================================================
-exports.archiveTask = async (req, res) => {
-try {
-const task = await Task.findById(req.params.id);
-if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
-
-// même règle que update
-if (req.user.role !== 'admin') {
-const isAssigned = task.assignedTo.some(u => u.toString() === req.user.id);
-const isCreator = task.createdBy.toString() === req.user.id;
-if (!isAssigned && !isCreator) {
-return res.status(403).json({ success: false, message: 'Not authorized' });
-}
-}
-
-task.isArchived = true;
-task.archivedAt = new Date();
-await task.save();
-
-res.status(200).json({ success: true, data: task });
-} catch (err) {
-res.status(500).json({ success: false, message: 'Error archiving task', error: err.message });
-}
-};
-
-// =====================================================
-// ✅ RESTORE TASK (AJOUT)
-// =====================================================
-exports.restoreTask = async (req, res) => {
-try {
-const task = await Task.findById(req.params.id);
-if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
-
-if (req.user.role !== 'admin') {
-const isAssigned = task.assignedTo.some(u => u.toString() === req.user.id);
-const isCreator = task.createdBy.toString() === req.user.id;
-if (!isAssigned && !isCreator) {
-return res.status(403).json({ success: false, message: 'Not authorized' });
-}
-}
-
-task.isArchived = false;
-task.archivedAt = null;
-await task.save();
-
-res.status(200).json({ success: true, data: task });
-} catch (err) {
-res.status(500).json({ success: false, message: 'Error restoring task', error: err.message });
-}
-};
-
-// =====================================================
 // DELETE TASK
 // =====================================================
 exports.deleteTask = async (req, res) => {
@@ -330,7 +273,10 @@ const now = new Date();
 
 const filters = {
 dueDate: { $lt: now },
-status: { $ne: 'completed' }
+status: { $ne: 'completed' },
+
+// ✅ ✅ ✅ On ne prend pas les tâches archivées dans "en retard"
+isArchived: false
 };
 
 if (req.user.role !== 'admin') {
