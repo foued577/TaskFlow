@@ -24,17 +24,17 @@ const upload = require('../middleware/upload');
 router.get('/overdue', protect, getOverdueTasks);
 
 // =====================================
+// ✅ ARCHIVE / RESTORE (AJOUT)
+// =====================================
+router.put('/:id/archive', protect, archiveTask);
+router.put('/:id/restore', protect, restoreTask);
+
+// =====================================
 // 🔥 GET ALL TASKS + CREATE
 // =====================================
 router.route('/')
 .get(protect, getTasks)
 .post(protect, createTask);
-
-// =====================================
-// 🔥 ARCHIVE / RESTORE TASK (AJOUT)
-// =====================================
-router.put('/:id/archive', protect, archiveTask);
-router.put('/:id/restore', protect, restoreTask);
 
 // =====================================
 // 🔥 GET ONE / UPDATE / DELETE
