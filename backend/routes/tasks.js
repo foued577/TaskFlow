@@ -11,9 +11,9 @@ addSubtask,
 toggleSubtask,
 uploadAttachment,
 getOverdueTasks,
-archiveTask, // ✅ AJOUT
-restoreTask // ✅ AJOUT
-} = require('../controllers/taskController');
+archiveTask,
+unarchiveTask
+} = require('../controllers/taskController'); // ✅ IMPORTANT (minuscule)
 
 const { protect } = require('../middleware/auth');
 const upload = require('../middleware/upload');
@@ -24,10 +24,10 @@ const upload = require('../middleware/upload');
 router.get('/overdue', protect, getOverdueTasks);
 
 // =====================================
-// ✅ ARCHIVE / RESTORE (AJOUT)
+// ✅ ARCHIVE / UNARCHIVE
 // =====================================
 router.put('/:id/archive', protect, archiveTask);
-router.put('/:id/restore', protect, restoreTask);
+router.put('/:id/unarchive', protect, unarchiveTask);
 
 // =====================================
 // 🔥 GET ALL TASKS + CREATE
