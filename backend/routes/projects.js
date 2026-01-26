@@ -23,9 +23,7 @@ router.get('/:id', protect, getProject);
 router.post('/', protect, createProject);
 router.put('/:id', protect, updateProject);
 
-// =====================================
-// 📦 ARCHIVE / RESTORE PROJECT (AJOUT)
-// =====================================
+// ✅ AJOUT: ARCHIVE / RESTORE
 router.put('/:id/archive', protect, archiveProject);
 router.put('/:id/restore', protect, restoreProject);
 
