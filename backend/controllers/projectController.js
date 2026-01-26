@@ -14,28 +14,27 @@ return !user.role || user.role === 'admin';
 exports.getProjects = async (req, res) => {
 try {
 let query = {};
-const q = { ...req.query };
-
-// =========================
-// ✅ ARCHIVE FILTER (AJOUT)
-// =========================
-if (q.archived === 'true') {
-query.isArchived = true;
-} else {
-query.isArchived = false;
-}
-// =========================
 
 if (!isGlobalAdmin(req.user)) {
 // 🔐 Membre : on récupère d'abord ses équipes
 const userTeams = await Team.find({ 'members.user': req.user.id }).select('_id');
 const teamIds = userTeams.map((t) => t._id);
 
-query.$or = [
+query = {
+$or: [
 { teams: { $in: teamIds } }, // nouveaux projets (multi-équipes)
 { team: { $in: teamIds } }, // anciens projets (champ "team")
 { createdBy: req.user.id }, // projets qu'il a créés
-];
+],
+};
+}
+
+// ✅ AJOUT: par défaut on n’affiche PAS les projets archivés
+// Pour afficher les archives: /projects?archived=true
+if (req.query.archived !== undefined) {
+query.isArchived = req.query.archived === 'true';
+} else {
+query.isArchived = { $ne: true };
 }
 
 const projects = await Project.find(query)
@@ -153,15 +152,14 @@ const legacyTeamId = teamIds.length === 1 ? teamIds[0] : undefined;
 const project = await Project.create({
 name,
 description: description || '',
-team: legacyTeamId,
-teams: teamIds,
+team: legacyTeamId, // pour compatibilité avec l’ancien code
+teams: teamIds, // nouveau champ multi-équipes
 startDate: startDate || null,
 endDate: endDate || null,
 tags: tags || [],
 priority: priority || 'medium',
 color: color || '#10B981',
-createdBy: req.user.id,
-// ✅ isArchived = false par défaut via le schema
+createdBy: req.user.id, // ✅ OBLIGATOIRE avec ton schéma
 });
 
 res.status(201).json({
@@ -221,6 +219,88 @@ console.error('Update project error:', error);
 res.status(500).json({
 success: false,
 message: 'Error updating project',
+error: error.message,
+});
+}
+};
+
+// ===============================================
+// ✅ ARCHIVE PROJECT (AJOUT)
+// @route PUT /api/projects/:id/archive
+// @access Admin
+// ===============================================
+exports.archiveProject = async (req, res) => {
+try {
+if (!isGlobalAdmin(req.user)) {
+return res.status(403).json({
+success: false,
+message: 'Only administrators can archive projects',
+});
+}
+
+const project = await Project.findById(req.params.id);
+
+if (!project) {
+return res.status(404).json({
+success: false,
+message: 'Project not found',
+});
+}
+
+project.isArchived = true;
+project.archivedAt = new Date();
+await project.save();
+
+res.status(200).json({
+success: true,
+data: project,
+});
+} catch (error) {
+console.error('Archive project error:', error);
+res.status(500).json({
+success: false,
+message: 'Error archiving project',
+error: error.message,
+});
+}
+};
+
+// ===============================================
+// ✅ RESTORE PROJECT (AJOUT)
+// @route PUT /api/projects/:id/restore
+// @access Admin
+// ===============================================
+exports.restoreProject = async (req, res) => {
+try {
+if (!isGlobalAdmin(req.user)) {
+return res.status(403).json({
+success: false,
+message: 'Only administrators can restore projects',
+});
+}
+
+const project = await Project.findById(req.params.id);
+
+if (!project) {
+return res.status(404).json({
+success: false,
+message: 'Project not found',
+});
+}
+
+project.isArchived = false;
+project.archivedAt = null;
+await project.save();
+
+res.status(200).json({
+success: true,
+data: project,
+});
+} catch (error) {
+console.error('Restore project error:', error);
+res.status(500).json({
+success: false,
+message: 'Error restoring project',
 error: error.message,
 });
 }
