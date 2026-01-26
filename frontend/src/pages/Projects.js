@@ -9,6 +9,8 @@ Trash2,
 X,
 Calendar as CalendarIcon,
 Users,
+Archive, // ✅ AJOUT
+RotateCcw, // ✅ AJOUT
 } from 'lucide-react';
 import Loading from '../components/Loading';
 import { format } from 'date-fns';
@@ -27,6 +29,9 @@ const [loading, setLoading] = useState(true);
 
 // ✅ ✅ ✅ AJOUT RECHERCHE
 const [search, setSearch] = useState("");
+
+// ✅ ✅ ✅ AJOUT MODE ARCHIVES
+const [showArchived, setShowArchived] = useState(false);
 
 const [showModal, setShowModal] = useState(false);
 const [modalMode, setModalMode] = useState("create");
@@ -205,10 +210,39 @@ urgent: "bg-red-100 text-red-800",
 return colors[priority] || colors.medium;
 };
 
+// ✅ ✅ ✅ ARCHIVER / RESTAURER
+const archiveProject = async (id) => {
+if (!isAdmin) {
+toast.error("Vous n’avez pas les droits");
+return;
+}
+try {
+await projectsAPI.update(id, { isArchived: true });
+toast.success("Projet archivé");
+loadData();
+} catch (error) {
+toast.error("Erreur lors de l’archivage");
+}
+};
+
+const restoreProject = async (id) => {
+if (!isAdmin) {
+toast.error("Vous n’avez pas les droits");
+return;
+}
+try {
+await projectsAPI.update(id, { isArchived: false });
+toast.success("Projet restauré");
+loadData();
+} catch (error) {
+toast.error("Erreur lors de la restauration");
+}
+};
+
 // ✅ ✅ ✅ FILTRAGE TEMPS RÉEL PAR NOM
-const filteredProjects = projects.filter(project =>
-project.name.toLowerCase().includes(search.toLowerCase())
-);
+const filteredProjects = projects
+.filter(project => project.name.toLowerCase().includes(search.toLowerCase()))
+.filter(project => (showArchived ? project.isArchived === true : !project.isArchived));
 
 if (loading) return <Loading fullScreen={false} />;
 
@@ -216,7 +250,9 @@ return (
 <div>
 {/* HEADER */}
 <div className="flex items-center justify-between mb-6">
-<h1 className="text-2xl font-bold">Projets</h1>
+<h1 className="text-2xl font-bold">
+{showArchived ? "Archives — Projets" : "Projets"}
+</h1>
 
 <div className="flex items-center gap-3">
 {/* ✅ ✅ ✅ INPUT RECHERCHE */}
@@ -227,6 +263,16 @@ className="input w-64"
 value={search}
 onChange={(e) => setSearch(e.target.value)}
 />
+
+{/* ✅ ✅ ✅ TOGGLE ARCHIVES */}
+<button
+onClick={() => setShowArchived((v) => !v)}
+className={`btn ${showArchived ? "btn-primary" : "btn-light"} flex items-center`}
+title={showArchived ? "Voir projets actifs" : "Voir archives"}
+>
+<Archive className="w-5 h-5 mr-2" />
+{showArchived ? "Actifs" : "Archives"}
+</button>
 
 {isAdmin && (
 <button onClick={openCreateModal} className="btn btn-primary flex items-center">
@@ -250,7 +296,6 @@ const projectTeams = project.teams || [];
 
 return (
 <div key={project._id} className="card hover:shadow-lg transition-shadow">
-
 {/* HEADER */}
 <div className="flex items-start justify-between mb-3">
 <div className="flex items-center">
@@ -285,9 +330,30 @@ style={{ backgroundColor: project.color }}
 <button
 onClick={() => openEditModal(project)}
 className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+disabled={project.isArchived}
+title={project.isArchived ? "Impossible de modifier un projet archivé" : "Modifier"}
 >
 <Edit2 className="w-4 h-4" />
 </button>
+
+{/* ✅ ✅ ✅ ARCHIVE / RESTORE */}
+{!project.isArchived ? (
+<button
+onClick={() => archiveProject(project._id)}
+className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+title="Archiver"
+>
+<Archive className="w-4 h-4" />
+</button>
+) : (
+<button
+onClick={() => restoreProject(project._id)}
+className="p-2 text-primary-600 hover:text-primary-700 rounded-lg hover:bg-primary-50"
+title="Restaurer"
+>
+<RotateCcw className="w-4 h-4" />
+</button>
+)}
 
 <button
 onClick={() => deleteProject(project._id)}
@@ -343,7 +409,6 @@ format(new Date(project.endDate), "dd MMM yyyy", { locale: fr })}
 {showModal && (
 <div className="fixed inset-0 bg-black bg-opacity-50 z-50 p-4 flex items-center justify-center">
 <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[85vh] overflow-y-auto">
-
 {/* HEADER */}
 <div className="flex items-center justify-between mb-4">
 <h2 className="text-xl font-bold">
@@ -356,7 +421,6 @@ format(new Date(project.endDate), "dd MMM yyyy", { locale: fr })}
 
 {/* FORM */}
 <form onSubmit={handleSubmit} className="space-y-4">
-
 {/* NAME */}
 <div>
 <label className="block text-sm font-medium mb-2">Nom</label>
