@@ -14,19 +14,28 @@ return !user.role || user.role === 'admin';
 exports.getProjects = async (req, res) => {
 try {
 let query = {};
+const q = { ...req.query };
+
+// =========================
+// ✅ ARCHIVE FILTER (AJOUT)
+// =========================
+if (q.archived === 'true') {
+query.isArchived = true;
+} else {
+query.isArchived = false;
+}
+// =========================
 
 if (!isGlobalAdmin(req.user)) {
 // 🔐 Membre : on récupère d'abord ses équipes
 const userTeams = await Team.find({ 'members.user': req.user.id }).select('_id');
 const teamIds = userTeams.map((t) => t._id);
 
-query = {
-$or: [
+query.$or = [
 { teams: { $in: teamIds } }, // nouveaux projets (multi-équipes)
 { team: { $in: teamIds } }, // anciens projets (champ "team")
 { createdBy: req.user.id }, // projets qu'il a créés
-],
-};
+];
 }
 
 const projects = await Project.find(query)
@@ -144,14 +153,15 @@ const legacyTeamId = teamIds.length === 1 ? teamIds[0] : undefined;
 const project = await Project.create({
 name,
 description: description || '',
-team: legacyTeamId, // pour compatibilité avec l’ancien code
-teams: teamIds, // nouveau champ multi-équipes
+team: legacyTeamId,
+teams: teamIds,
 startDate: startDate || null,
 endDate: endDate || null,
 tags: tags || [],
 priority: priority || 'medium',
 color: color || '#10B981',
-createdBy: req.user.id, // ✅ OBLIGATOIRE avec ton schéma
+createdBy: req.user.id,
+// ✅ isArchived = false par défaut via le schema
 });
 
 res.status(201).json({
