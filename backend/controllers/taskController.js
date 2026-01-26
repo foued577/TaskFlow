@@ -16,19 +16,18 @@ Object.keys(q).forEach((k) => {
 if (!q[k]) delete q[k];
 });
 
-// ✅ ARCHIVE FILTER (AJOUT)
-// Par défaut: on ne renvoie PAS les tâches archivées
-// Pour voir les archives: ?archived=true
-if (q.archived === 'true') {
-filters.isArchived = true;
-} else {
-filters.isArchived = false;
-}
-// ✅ FIN AJOUT
-
 if (q.status) filters.status = q.status;
 if (q.priority) filters.priority = q.priority;
 if (q.projectId) filters.project = q.projectId;
+
+// ✅ AJOUT: par défaut on n’affiche PAS les tâches archivées
+// Pour afficher les archives: /tasks?archived=true
+if (q.archived !== undefined) {
+filters.isArchived = q.archived === 'true';
+} else {
+filters.isArchived = { $ne: true };
+}
+delete q.archived;
 
 // Role filtering
 if (role !== 'admin') {
@@ -120,7 +119,6 @@ priority,
 status,
 dueDate,
 createdBy: req.user.id
-// ✅ PAS BESOIN D’AJOUTER isArchived ICI SI DEFAULT = false DANS LE MODEL
 });
 
 res.status(201).json({ success: true, data: task });
@@ -156,6 +154,59 @@ res.status(200).json({ success: true, data: task });
 
 } catch (err) {
 res.status(500).json({ success: false, message: 'Error updating task', error: err.message });
+}
+};
+
+// =====================================================
+// ✅ ARCHIVE TASK (AJOUT)
+// =====================================================
+exports.archiveTask = async (req, res) => {
+try {
+const task = await Task.findById(req.params.id);
+if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
+
+// même règle que update
+if (req.user.role !== 'admin') {
+const isAssigned = task.assignedTo.some(u => u.toString() === req.user.id);
+const isCreator = task.createdBy.toString() === req.user.id;
+if (!isAssigned && !isCreator) {
+return res.status(403).json({ success: false, message: 'Not authorized' });
+}
+}
+
+task.isArchived = true;
+task.archivedAt = new Date();
+await task.save();
+
+res.status(200).json({ success: true, data: task });
+} catch (err) {
+res.status(500).json({ success: false, message: 'Error archiving task', error: err.message });
+}
+};
+
+// =====================================================
+// ✅ RESTORE TASK (AJOUT)
+// =====================================================
+exports.restoreTask = async (req, res) => {
+try {
+const task = await Task.findById(req.params.id);
+if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
+
+if (req.user.role !== 'admin') {
+const isAssigned = task.assignedTo.some(u => u.toString() === req.user.id);
+const isCreator = task.createdBy.toString() === req.user.id;
+if (!isAssigned && !isCreator) {
+return res.status(403).json({ success: false, message: 'Not authorized' });
+}
+}
+
+task.isArchived = false;
+task.archivedAt = null;
+await task.save();
+
+res.status(200).json({ success: true, data: task });
+} catch (err) {
+res.status(500).json({ success: false, message: 'Error restoring task', error: err.message });
 }
 };
 
@@ -281,10 +332,6 @@ const filters = {
 dueDate: { $lt: now },
 status: { $ne: 'completed' }
 };
-
-// ✅ ARCHIVE FILTER (AJOUT) : on exclut les tâches archivées des "overdue"
-filters.isArchived = false;
-// ✅ FIN AJOUT
 
 if (req.user.role !== 'admin') {
 filters.assignedTo = req.user.id;
