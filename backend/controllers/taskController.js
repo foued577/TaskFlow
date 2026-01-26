@@ -20,13 +20,14 @@ if (q.status) filters.status = q.status;
 if (q.priority) filters.priority = q.priority;
 if (q.projectId) filters.project = q.projectId;
 
-// ✅ ✅ ✅ ARCHIVE FILTER (AJOUT)
-const showArchived =
-q.archived === 'true' ||
-q.archived === true ||
-q.isArchived === 'true' ||
-q.isArchived === true;
-filters.isArchived = showArchived;
+// ✅ ✅ ✅ ARCHIVE FILTER
+// /tasks -> non archivées
+// /tasks?archived=true -> archivées
+if (q.archived === 'true' || q.archived === true) {
+filters.archived = true;
+} else {
+filters.archived = { $ne: true };
+}
 
 // Role filtering
 if (role !== 'admin') {
@@ -277,9 +278,7 @@ const now = new Date();
 const filters = {
 dueDate: { $lt: now },
 status: { $ne: 'completed' },
-
-// ✅ ✅ ✅ AJOUT : ne pas inclure les tâches archivées
-isArchived: false
+archived: { $ne: true } // ✅ ne pas afficher les archivées ici
 };
 
 if (req.user.role !== 'admin') {
@@ -302,5 +301,43 @@ success: false,
 message: 'Error fetching overdue tasks',
 error: err.message
 });
+}
+};
+
+// =====================================================
+// ✅ ARCHIVE TASK
+// =====================================================
+exports.archiveTask = async (req, res) => {
+try {
+const task = await Task.findByIdAndUpdate(
+req.params.id,
+{ archived: true },
+{ new: true }
+);
+
+if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
+
+res.status(200).json({ success: true, message: 'Task archived', data: task });
+} catch (err) {
+res.status(500).json({ success: false, message: 'Error archiving task', error: err.message });
+}
+};
+
+// =====================================================
+// ✅ UNARCHIVE TASK
+// =====================================================
+exports.unarchiveTask = async (req, res) => {
+try {
+const task = await Task.findByIdAndUpdate(
+req.params.id,
+{ archived: false },
+{ new: true }
+);
+
+if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
+
+res.status(200).json({ success: true, message: 'Task restored', data: task });
+} catch (err) {
+res.status(500).json({ success: false, message: 'Error restoring task', error: err.message });
 }
 };
