@@ -22,7 +22,10 @@ if (q.projectId) filters.project = q.projectId;
 
 // ✅ ✅ ✅ ARCHIVE FILTER (AJOUT)
 const showArchived =
-q.archived === 'true' || q.archived === true || q.isArchived === 'true' || q.isArchived === true;
+q.archived === 'true' ||
+q.archived === true ||
+q.isArchived === 'true' ||
+q.isArchived === true;
 filters.isArchived = showArchived;
 
 // Role filtering
@@ -275,7 +278,7 @@ const filters = {
 dueDate: { $lt: now },
 status: { $ne: 'completed' },
 
-// ✅ ✅ ✅ On ne prend pas les tâches archivées dans "en retard"
+// ✅ ✅ ✅ AJOUT : ne pas inclure les tâches archivées
 isArchived: false
 };
 
