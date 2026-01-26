@@ -71,7 +71,7 @@ type: Date,
 default: null
 },
 
-// ✅ ✅ ✅ ARCHIVE (AJOUT)
+// ✅ ✅ ✅ AJOUT ARCHIVE (NE CHANGE RIEN D’AUTRE)
 isArchived: {
 type: Boolean,
 default: false
@@ -130,8 +130,8 @@ taskSchema.index({ assignedTo: 1 });
 taskSchema.index({ dueDate: 1 });
 taskSchema.index({ parentTask: 1 });
 
-// ✅ ✅ ✅ ARCHIVE INDEX (AJOUT)
-taskSchema.index({ isArchived: 1 });
+// ✅ index archive
+taskSchema.index({ isArchived: 1, createdAt: -1 });
 
 // Calculate completion percentage
 taskSchema.virtual('completionPercentage').get(function() {
