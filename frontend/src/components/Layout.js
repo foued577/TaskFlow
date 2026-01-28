@@ -1,3 +1,4 @@
+// frontend/src/components/Layout.js :
 import React, { useState, useEffect } from "react";
 import { Outlet, Link as RouterLink, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -21,6 +22,9 @@ Link as LinkIcon // ✅ AJOUT IMPORT ICÔNE
 } from "lucide-react";
 
 import NotificationDropdown from "./NotificationDropdown";
+
+// ✅ ✅ ✅ AJOUT LOGO (chemin relatif au projet)
+import taskflowLogo from "../assets/logotaskflow.png";
 
 const Layout = () => {
 const { user, logout } = useAuth();
@@ -65,7 +69,15 @@ return (
 
 {/* LOGO */}
 <div className="flex items-center justify-between h-16 px-6 border-b">
-<h1 className="text-2xl font-bold text-primary-600 dark:text-primary-400">TaskFlow</h1>
+{/* ✅ ✅ ✅ LOGO IMAGE AU LIEU DU TEXTE */}
+<RouterLink to="/" className="flex items-center">
+<img
+src={taskflowLogo}
+alt="TaskFlow"
+className="h-8 w-auto"
+draggable={false}
+/>
+</RouterLink>
 
 <button
 onClick={() => setTheme(theme === "light" ? "dark" : "light")}
