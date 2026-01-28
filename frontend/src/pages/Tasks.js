@@ -95,15 +95,19 @@ if (taskView === "assigned") query.filterType = "assignedToMe";
 if (taskView === "created_not_assigned")
 query.filterType = "createdByMeNotAssignedToMe";
 
-// ✅ ✅ ✅ IMPORTANT : on indique au backend si on veut les archivées
-query.archived = showArchived;
+// ✅ ✅ ✅ FIX IMPORTANT : n'envoyer "archived" QUE si on veut voir les archives
+if (showArchived) {
+query.archived = true; // ou "true" si tu veux forcer string
+} else {
+delete query.archived;
+}
 
 const tasksRes = await tasksAPI.getAll(query);
 const projectsRes = await projectsAPI.getAll();
 
 let fetchedTasks = tasksRes.data.data || [];
 
-// ✅ ✅ ✅ FILTRE ARCHIVES (front) corrigé : archived (pas isArchived)
+// ✅ ✅ ✅ Sécurité front : si jamais le backend renvoie tout, on filtre quand même
 fetchedTasks = fetchedTasks.filter((t) =>
 showArchived ? t.archived === true : t.archived !== true
 );
