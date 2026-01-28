@@ -15,8 +15,8 @@ import Loading from "../components/Loading";
 import { formatDistanceToNow } from "date-fns";
 import { fr } from "date-fns/locale";
 
-// ✅ ✅ ✅ AJOUT LOGO
-import taskflowLogo from "C:\Users\Foued\Downloads\logotaskflow.png";
+// ✅ ✅ ✅ AJOUT LOGO (CORRIGÉ: import depuis le projet)
+import taskflowLogo from "../assets/logotaskflow.png";
 
 const Dashboard = () => {
 const { user } = useAuth();
