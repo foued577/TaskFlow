@@ -95,14 +95,17 @@ if (taskView === "assigned") query.filterType = "assignedToMe";
 if (taskView === "created_not_assigned")
 query.filterType = "createdByMeNotAssignedToMe";
 
+// ✅ ✅ ✅ IMPORTANT : on indique au backend si on veut les archivées
+query.archived = showArchived;
+
 const tasksRes = await tasksAPI.getAll(query);
 const projectsRes = await projectsAPI.getAll();
 
 let fetchedTasks = tasksRes.data.data || [];
 
-// ✅ ✅ ✅ FILTRE ARCHIVES (front) : par défaut on cache, sinon on affiche uniquement les archivées
+// ✅ ✅ ✅ FILTRE ARCHIVES (front) corrigé : archived (pas isArchived)
 fetchedTasks = fetchedTasks.filter((t) =>
-showArchived ? t.isArchived === true : !t.isArchived
+showArchived ? t.archived === true : t.archived !== true
 );
 
 // TRI IDENTIQUE
@@ -161,14 +164,14 @@ toast.error("Erreur lors du changement de statut");
 }
 };
 
-// ✅ ✅ ✅ ARCHIVER / RESTAURER
+// ✅ ✅ ✅ ARCHIVER / RESTAURER (corrigé => archived)
 const archiveTask = async (taskId) => {
 if (!isAdmin) {
 toast.error("Vous n’avez pas les droits");
 return;
 }
 try {
-await tasksAPI.update(taskId, { isArchived: true });
+await tasksAPI.update(taskId, { archived: true });
 toast.success("Tâche archivée");
 loadData();
 } catch {
@@ -182,7 +185,7 @@ toast.error("Vous n’avez pas les droits");
 return;
 }
 try {
-await tasksAPI.update(taskId, { isArchived: false });
+await tasksAPI.update(taskId, { archived: false });
 toast.success("Tâche restaurée");
 loadData();
 } catch {
@@ -243,7 +246,9 @@ onChange={(e) => setSearch(e.target.value)}
 {!isOverdueMode && (
 <button
 onClick={() => setShowArchived((v) => !v)}
-className={`btn ${showArchived ? "btn-primary" : "btn-light"} flex items-center`}
+className={`btn ${
+showArchived ? "btn-primary" : "btn-light"
+} flex items-center`}
 title={showArchived ? "Voir tâches actives" : "Voir archives"}
 >
 <Archive className="w-5 h-5 mr-2" />
@@ -275,14 +280,18 @@ className="btn btn-primary flex items-center"
 
 <div className="flex gap-2 mb-4">
 <button
-className={`btn ${taskView === "all" ? "btn-primary" : "btn-light"}`}
+className={`btn ${
+taskView === "all" ? "btn-primary" : "btn-light"
+}`}
 onClick={() => setTaskView("all")}
 >
 Toutes les tâches
 </button>
 
 <button
-className={`btn ${taskView === "assigned" ? "btn-primary" : "btn-light"}`}
+className={`btn ${
+taskView === "assigned" ? "btn-primary" : "btn-light"
+}`}
 onClick={() => setTaskView("assigned")}
 >
 Assignées à moi
@@ -290,7 +299,9 @@ Assignées à moi
 
 <button
 className={`btn ${
-taskView === "created_not_assigned" ? "btn-primary" : "btn-light"
+taskView === "created_not_assigned"
+? "btn-primary"
+: "btn-light"
 }`}
 onClick={() => setTaskView("created_not_assigned")}
 >
@@ -386,12 +397,16 @@ animate={{ opacity: 1, y: 0 }}
 exit={{ opacity: 0 }}
 transition={{ duration: 0.2 }}
 onClick={() => handleTaskClick(task)}
-className={`card hover:shadow-lg ${isAdmin ? "cursor-pointer" : "cursor-default"}`}
+className={`card hover:shadow-lg ${
+isAdmin ? "cursor-pointer" : "cursor-default"
+}`}
 >
 <div className="flex items-start justify-between">
 <div className="flex-1">
 <h3 className="text-lg font-bold">{task.title}</h3>
-<p className="text-sm text-gray-600">{task.project?.name}</p>
+<p className="text-sm text-gray-600">
+{task.project?.name}
+</p>
 
 {task.assignedTo?.length > 0 && (
 <div className="flex items-center flex-wrap gap-2 mt-2">
@@ -409,24 +424,34 @@ className="w-7 h-7 flex items-center justify-center rounded-full bg-purple-100 t
 
 <div className="flex gap-2 mt-3">
 <span
-className={`badge ${getStatusColor(isOverdue ? "overdue" : task.status)}`}
+className={`badge ${getStatusColor(
+isOverdue ? "overdue" : task.status
+)}`}
 >
 {getStatusLabel(isOverdue ? "overdue" : task.status)}
 </span>
 
-<span className={`badge ${getPriorityColor(task.priority)}`}>
+<span
+className={`badge ${getPriorityColor(task.priority)}`}
+>
 {task.priority}
 </span>
 
 {task.dueDate && (
 <span
 className={`badge flex items-center ${
-isOverdue ? "bg-red-100 text-red-800" : "bg-gray-100 text-gray-700"
+isOverdue
+? "bg-red-100 text-red-800"
+: "bg-gray-100 text-gray-700"
 }`}
 >
 <CalendarIcon className="w-3 h-3 mr-1" />
-{format(new Date(task.dueDate), "dd MMM yyyy", { locale: fr })}
-{isOverdue && <AlertCircle className="w-3 h-3 ml-1" />}
+{format(new Date(task.dueDate), "dd MMM yyyy", {
+locale: fr,
+})}
+{isOverdue && (
+<AlertCircle className="w-3 h-3 ml-1" />
+)}
 </span>
 )}
 </div>
@@ -436,11 +461,17 @@ isOverdue ? "bg-red-100 text-red-800" : "bg-gray-100 text-gray-700"
 <div className="flex items-center gap-2">
 <select
 value={task.status}
-onChange={(e) => updateTaskStatus(task._id, e.target.value)}
+onChange={(e) =>
+updateTaskStatus(task._id, e.target.value)
+}
 onClick={(e) => e.stopPropagation()}
 className="text-sm border rounded-lg px-2 py-1"
-disabled={task.isArchived}
-title={task.isArchived ? "Impossible de changer le statut d’une tâche archivée" : ""}
+disabled={task.archived}
+title={
+task.archived
+? "Impossible de changer le statut d’une tâche archivée"
+: ""
+}
 >
 <option value="not_started">Non démarrée</option>
 <option value="in_progress">En cours</option>
@@ -448,7 +479,7 @@ title={task.isArchived ? "Impossible de changer le statut d’une tâche archiv�
 </select>
 
 {/* ✅ ✅ ✅ ARCHIVE / RESTORE BUTTON */}
-{!task.isArchived ? (
+{!task.archived ? (
 <button
 onClick={(e) => {
 e.stopPropagation();
