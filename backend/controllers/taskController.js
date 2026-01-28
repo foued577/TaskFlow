@@ -20,7 +20,7 @@ if (q.status) filters.status = q.status;
 if (q.priority) filters.priority = q.priority;
 if (q.projectId) filters.project = q.projectId;
 
-// ✅ ✅ ✅ ARCHIVE FILTER
+// ✅ ✅ ✅ ARCHIVE FILTER (AJOUT)
 // /tasks -> non archivées
 // /tasks?archived=true -> archivées
 if (q.archived === 'true' || q.archived === true) {
@@ -191,7 +191,11 @@ if (!title) {
 return res.status(400).json({ success: false, message: 'Subtask title required' });
 }
 
-task.subtasks.push({ title, completed: false });
+// ✅ ✅ ✅ COMPAT SUBTASK FIELD (AJOUT)
+// Ton model utilise isCompleted, mais ici on gardait completed.
+// On ajoute isCompleted pour que ça marche avec le modèle.
+task.subtasks.push({ title, completed: false, isCompleted: false });
+
 await task.save();
 
 res.status(200).json({ success: true, data: task });
@@ -214,7 +218,11 @@ if (!task) return res.status(404).json({ success: false, message: 'Task not foun
 const subtask = task.subtasks.id(subtaskId);
 if (!subtask) return res.status(404).json({ success: false, message: 'Subtask not found' });
 
-subtask.completed = !subtask.completed;
+// ✅ ✅ ✅ COMPAT SUBTASK FIELD (AJOUT)
+// On bascule isCompleted (champ du modèle) + on garde completed si existant.
+subtask.isCompleted = !subtask.isCompleted;
+subtask.completed = subtask.isCompleted;
+
 await task.save();
 
 res.status(200).json({ success: true, data: task });
@@ -245,10 +253,13 @@ return res.status(400).json({ success: false, message: 'No file uploaded' });
 const fileData = {
 filename: req.file.filename,
 originalName: req.file.originalname,
+
+// ✅ ✅ ✅ COMPAT MODEL FIELD (AJOUT)
+// Le modèle utilise "mimetype" (pas "mimeType")
 mimetype: req.file.mimetype,
+mimeType: req.file.mimetype,
+
 size: req.file.size,
-path: req.file.path,
-uploadedBy: req.user.id,
 uploadedAt: new Date()
 };
 
@@ -280,7 +291,9 @@ const now = new Date();
 const filters = {
 dueDate: { $lt: now },
 status: { $ne: 'completed' },
-archived: { $ne: true } // ✅ ne pas afficher les archivées ici
+
+// ✅ ✅ ✅ EXCLUDE ARCHIVED (AJOUT)
+archived: { $ne: true }
 };
 
 if (req.user.role !== 'admin') {
@@ -307,7 +320,7 @@ error: err.message
 };
 
 // =====================================================
-// ✅ ARCHIVE TASK
+// ✅ ARCHIVE TASK (AJOUT)
 // =====================================================
 exports.archiveTask = async (req, res) => {
 try {
@@ -327,13 +340,14 @@ task.archived = true;
 await task.save();
 
 res.status(200).json({ success: true, message: 'Task archived', data: task });
+
 } catch (err) {
 res.status(500).json({ success: false, message: 'Error archiving task', error: err.message });
 }
 };
 
 // =====================================================
-// ✅ UNARCHIVE TASK
+// ✅ UNARCHIVE TASK (AJOUT)
 // =====================================================
 exports.unarchiveTask = async (req, res) => {
 try {
@@ -353,6 +367,7 @@ task.archived = false;
 await task.save();
 
 res.status(200).json({ success: true, message: 'Task restored', data: task });
+
 } catch (err) {
 res.status(500).json({ success: false, message: 'Error restoring task', error: err.message });
 }
