@@ -1,306 +1,339 @@
-const Task = require('../models/Task');
 const Project = require('../models/Project');
+const Team = require('../models/Team');
 
-// =====================================================
-// GET ALL TASKS
-// =====================================================
-exports.getTasks = async (req, res) => {
+// Helper : déterminer si l'utilisateur est admin global
+const isGlobalAdmin = (user) => {
+return !user.role || user.role === 'admin';
+};
+
+// ===============================================
+// 🔹 GET ALL PROJECTS
+// @route GET /api/projects
+// @access Private
+// ===============================================
+exports.getProjects = async (req, res) => {
 try {
-const userId = req.user.id;
-const role = req.user.role || 'admin';
-let filters = {};
-let q = { ...req.query };
+let query = {};
 
-// Remove empty filters
-Object.keys(q).forEach((k) => {
-if (!q[k]) delete q[k];
-});
+if (!isGlobalAdmin(req.user)) {
+// 🔐 Membre : on récupère d'abord ses équipes
+const userTeams = await Team.find({ 'members.user': req.user.id }).select('_id');
+const teamIds = userTeams.map((t) => t._id);
 
-if (q.status) filters.status = q.status;
-if (q.priority) filters.priority = q.priority;
-if (q.projectId) filters.project = q.projectId;
+query = {
+$or: [
+{ teams: { $in: teamIds } }, // nouveaux projets (multi-équipes)
+{ team: { $in: teamIds } }, // anciens projets (champ "team")
+{ createdBy: req.user.id }, // projets qu'il a créés
+],
+};
+}
 
 // ✅ ✅ ✅ ARCHIVE FILTER (AJOUT)
-const showArchived =
-q.archived === 'true' ||
-q.archived === true ||
-q.isArchived === 'true' ||
-q.isArchived === true;
-filters.isArchived = showArchived;
-
-// Role filtering
-if (role !== 'admin') {
-filters.$or = [
-{ assignedTo: userId },
-{ createdBy: userId }
-];
+// /projects -> actifs
+// /projects?archived=true -> archivés
+if (req.query.archived === 'true' || req.query.archived === true) {
+query.status = 'archived';
+} else {
+query.status = { $ne: 'archived' };
 }
 
-if (q.filterType === 'assignedToMe') {
-filters.assignedTo = userId;
-}
-
-if (q.filterType === 'createdByMeNotAssignedToMe') {
-filters.createdBy = userId;
-filters.assignedTo = { $ne: userId };
-}
-
-const tasks = await Task.find(filters)
-.populate('assignedTo', 'firstName lastName email')
-.populate('project', 'name color')
+const projects = await Project.find(query)
+.populate('teams', 'name color')
+.populate('team', 'name color')
 .sort({ createdAt: -1 });
 
-res.status(200).json({ success: true, data: tasks });
-
-} catch (err) {
-res.status(500).json({ success: false, message: 'Error fetching tasks', error: err.message });
+res.status(200).json({
+success: true,
+count: projects.length,
+data: projects,
+});
+} catch (error) {
+console.error('Get projects error:', error);
+res.status(500).json({
+success: false,
+message: 'Error fetching projects',
+error: error.message,
+});
 }
 };
 
-// =====================================================
-// GET ONE TASK
-// =====================================================
-exports.getTask = async (req, res) => {
+// ===============================================
+// 🔹 GET ONE PROJECT
+// @route GET /api/projects/:id
+// @access Private
+// ===============================================
+exports.getProject = async (req, res) => {
 try {
-const task = await Task.findById(req.params.id)
-.populate('assignedTo', 'firstName lastName email')
-.populate('project', 'name color');
+const project = await Project.findById(req.params.id)
+.populate('teams', 'name color')
+.populate('team', 'name color');
 
-if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
-
-if (req.user.role !== 'admin') {
-const isAssigned = task.assignedTo.some(u => u.toString() === req.user.id);
-const isCreator = task.createdBy.toString() === req.user.id;
-
-if (!isAssigned && !isCreator) {
-return res.status(403).json({ success: false, message: 'Not authorized' });
-}
-}
-
-res.status(200).json({ success: true, data: task });
-
-} catch (err) {
-res.status(500).json({ success: false, message: 'Error fetching task', error: err.message });
-}
-};
-
-// =====================================================
-// CREATE TASK
-// =====================================================
-exports.createTask = async (req, res) => {
-try {
-const { title, description, projectId, assignedTo, priority, status, dueDate } = req.body;
-
-const project = await Project.findById(projectId);
 if (!project) {
-return res.status(404).json({ success: false, message: 'Project not found' });
+return res.status(404).json({
+success: false,
+message: 'Project not found',
+});
 }
 
-if (req.user.role !== 'admin') {
-const userTeamIds = req.user.teams?.map(t => t.toString()) || [];
-const projectTeams = project.teams?.map(t => t.toString()) || [];
+// Admin global → accès complet
+if (!isGlobalAdmin(req.user)) {
+// Récupérer les équipes du user
+const userTeams = await Team.find({ 'members.user': req.user.id }).select('_id');
+const userTeamIds = userTeams.map((t) => t._id.toString());
 
-const allowed = projectTeams.some(t => userTeamIds.includes(t));
-if (!allowed) {
+const projectTeamsIds = [
+...(project.teams || []).map((t) => t._id.toString()),
+];
+
+if (project.team) {
+projectTeamsIds.push(project.team._id.toString());
+}
+
+const isCreator = project.createdBy.toString() === req.user.id.toString();
+const hasTeamAccess = projectTeamsIds.some((id) => userTeamIds.includes(id));
+
+if (!isCreator && !hasTeamAccess) {
 return res.status(403).json({
 success: false,
-message: 'Not authorized to create a task in this project'
+message: 'You do not have access to this project',
 });
 }
 }
 
-const task = await Task.create({
-title,
-description,
-project: projectId,
-assignedTo,
-priority,
-status,
-dueDate,
-createdBy: req.user.id
+res.status(200).json({
+success: true,
+data: project,
 });
-
-res.status(201).json({ success: true, data: task });
-
-} catch (err) {
-res.status(500).json({ success: false, message: 'Error creating task', error: err.message });
+} catch (error) {
+console.error('Get project error:', error);
+res.status(500).json({
+success: false,
+message: 'Error fetching project',
+error: error.message,
+});
 }
 };
 
-// =====================================================
-// UPDATE TASK
-// =====================================================
-exports.updateTask = async (req, res) => {
+// ===============================================
+// 🔹 CREATE PROJECT (ADMIN ONLY)
+// @route POST /api/projects
+// @access Admin
+// ===============================================
+exports.createProject = async (req, res) => {
 try {
+if (!isGlobalAdmin(req.user)) {
+return res.status(403).json({
+success: false,
+message: 'Only administrators can create projects',
+});
+}
+
+const {
+name,
+description,
+teamIds,
+startDate,
+endDate,
+tags,
+priority,
+color,
+} = req.body;
+
+if (!name || !teamIds || !Array.isArray(teamIds) || teamIds.length === 0) {
+return res.status(400).json({
+success: false,
+message: 'Project name and at least one team are required',
+});
+}
+
+// Legacy : si une seule équipe → on remplit aussi "team"
+const legacyTeamId = teamIds.length === 1 ? teamIds[0] : undefined;
+
+const project = await Project.create({
+name,
+description: description || '',
+team: legacyTeamId, // pour compatibilité avec l’ancien code
+teams: teamIds, // nouveau champ multi-équipes
+startDate: startDate || null,
+endDate: endDate || null,
+tags: tags || [],
+priority: priority || 'medium',
+color: color || '#10B981',
+createdBy: req.user.id, // ✅ OBLIGATOIRE avec ton schéma
+});
+
+res.status(201).json({
+success: true,
+data: project,
+});
+} catch (error) {
+console.error('Create project error:', error);
+res.status(500).json({
+success: false,
+message: 'Error creating project',
+error: error.message,
+});
+}
+};
+
+// ===============================================
+// 🔹 UPDATE PROJECT (ADMIN ONLY)
+// @route PUT /api/projects/:id
+// @access Admin
+// ===============================================
+exports.updateProject = async (req, res) => {
+try {
+if (!isGlobalAdmin(req.user)) {
+return res.status(403).json({
+success: false,
+message: 'Only administrators can update projects',
+});
+}
+
 const updates = { ...req.body };
 
-const task = await Task.findById(req.params.id);
-if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
-
-if (req.user.role !== 'admin') {
-const isAssigned = task.assignedTo.some(u => u.toString() === req.user.id);
-const isCreator = task.createdBy.toString() === req.user.id;
-
-if (!isAssigned && !isCreator) {
-return res.status(403).json({ success: false, message: 'Not authorized' });
-}
+// Si on reçoit "teamIds" depuis le front, on synchronise "teams" + "team"
+if (Array.isArray(updates.teamIds)) {
+updates.teams = updates.teamIds;
+updates.team = updates.teamIds.length === 1 ? updates.teamIds[0] : undefined;
+delete updates.teamIds;
 }
 
-Object.assign(task, updates);
-await task.save();
+const project = await Project.findByIdAndUpdate(req.params.id, updates, {
+new: true,
+});
 
-res.status(200).json({ success: true, data: task });
-
-} catch (err) {
-res.status(500).json({ success: false, message: 'Error updating task', error: err.message });
-}
-};
-
-// =====================================================
-// DELETE TASK
-// =====================================================
-exports.deleteTask = async (req, res) => {
-try {
-const task = await Task.findById(req.params.id);
-if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
-
-if (req.user.role !== 'admin' && task.createdBy.toString() !== req.user.id) {
-return res.status(403).json({ success: false, message: 'Not authorized' });
-}
-
-await task.deleteOne();
-
-res.status(200).json({ success: true, message: 'Task deleted' });
-
-} catch (err) {
-res.status(500).json({ success: false, message: 'Error deleting task', error: err.message });
-}
-};
-
-// =====================================================
-// ADD SUBTASK
-// =====================================================
-exports.addSubtask = async (req, res) => {
-try {
-const task = await Task.findById(req.params.id);
-if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
-
-const title = req.body.title;
-if (!title) {
-return res.status(400).json({ success: false, message: 'Subtask title required' });
-}
-
-task.subtasks.push({ title, completed: false });
-await task.save();
-
-res.status(200).json({ success: true, data: task });
-
-} catch (err) {
-res.status(500).json({ success: false, message: 'Error adding subtask', error: err.message });
-}
-};
-
-// =====================================================
-// TOGGLE SUBTASK
-// =====================================================
-exports.toggleSubtask = async (req, res) => {
-try {
-const { id, subtaskId } = req.params;
-
-const task = await Task.findById(id);
-if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
-
-const subtask = task.subtasks.id(subtaskId);
-if (!subtask) return res.status(404).json({ success: false, message: 'Subtask not found' });
-
-subtask.completed = !subtask.completed;
-await task.save();
-
-res.status(200).json({ success: true, data: task });
-
-} catch (err) {
-res.status(500).json({
+if (!project) {
+return res.status(404).json({
 success: false,
-message: 'Error toggling subtask',
-error: err.message
+message: 'Project not found',
 });
 }
-};
-
-// =====================================================
-// UPLOAD ATTACHMENT
-// =====================================================
-exports.uploadAttachment = async (req, res) => {
-try {
-const task = await Task.findById(req.params.id);
-if (!task) {
-return res.status(404).json({ success: false, message: 'Task not found' });
-}
-
-if (!req.file) {
-return res.status(400).json({ success: false, message: 'No file uploaded' });
-}
-
-const fileData = {
-filename: req.file.filename,
-originalName: req.file.originalname,
-mimeType: req.file.mimetype,
-size: req.file.size,
-uploadedAt: new Date()
-};
-
-task.attachments.push(fileData);
-await task.save();
 
 res.status(200).json({
 success: true,
-message: 'File uploaded successfully',
-data: fileData
+data: project,
 });
-
-} catch (err) {
+} catch (error) {
+console.error('Update project error:', error);
 res.status(500).json({
 success: false,
-message: 'Error uploading attachment',
-error: err.message
+message: 'Error updating project',
+error: error.message,
 });
 }
 };
 
-// =====================================================
-// GET OVERDUE TASKS
-// =====================================================
-exports.getOverdueTasks = async (req, res) => {
+// ===============================================
+// 🔹 DELETE PROJECT (ADMIN ONLY)
+// @route DELETE /api/projects/:id
+// @access Admin
+// ===============================================
+exports.deleteProject = async (req, res) => {
 try {
-const now = new Date();
-
-const filters = {
-dueDate: { $lt: now },
-status: { $ne: 'completed' },
-
-// ✅ ✅ ✅ AJOUT : ne pas inclure les tâches archivées
-isArchived: false
-};
-
-if (req.user.role !== 'admin') {
-filters.assignedTo = req.user.id;
+if (!isGlobalAdmin(req.user)) {
+return res.status(403).json({
+success: false,
+message: 'Only administrators can delete projects',
+});
 }
 
-const tasks = await Task.find(filters)
-.populate('assignedTo', 'firstName lastName email')
-.populate('project', 'name');
+const project = await Project.findById(req.params.id);
+
+if (!project) {
+return res.status(404).json({
+success: false,
+message: 'Project not found',
+});
+}
+
+await project.deleteOne();
 
 res.status(200).json({
 success: true,
-count: tasks.length,
-data: tasks
+message: 'Project deleted',
 });
-
-} catch (err) {
+} catch (error) {
+console.error('Delete project error:', error);
 res.status(500).json({
 success: false,
-message: 'Error fetching overdue tasks',
-error: err.message
+message: 'Error deleting project',
+error: error.message,
+});
+}
+};
+
+// ===============================================
+// ✅ ARCHIVE PROJECT
+// ===============================================
+exports.archiveProject = async (req, res) => {
+try {
+if (!isGlobalAdmin(req.user)) {
+return res.status(403).json({
+success: false,
+message: 'Only administrators can archive projects',
+});
+}
+
+const project = await Project.findById(req.params.id);
+if (!project) {
+return res.status(404).json({
+success: false,
+message: 'Project not found',
+});
+}
+
+project.status = 'archived';
+await project.save();
+
+res.status(200).json({
+success: true,
+message: 'Project archived',
+data: project,
+});
+} catch (error) {
+res.status(500).json({
+success: false,
+message: 'Error archiving project',
+error: error.message,
+});
+}
+};
+
+// ===============================================
+// ✅ UNARCHIVE PROJECT
+// ===============================================
+exports.unarchiveProject = async (req, res) => {
+try {
+if (!isGlobalAdmin(req.user)) {
+return res.status(403).json({
+success: false,
+message: 'Only administrators can restore projects',
+});
+}
+
+const project = await Project.findById(req.params.id);
+if (!project) {
+return res.status(404).json({
+success: false,
+message: 'Project not found',
+});
+}
+
+project.status = 'active';
+await project.save();
+
+res.status(200).json({
+success: true,
+message: 'Project restored',
+data: project,
+});
+} catch (error) {
+res.status(500).json({
+success: false,
+message: 'Error restoring project',
+error: error.message,
 });
 }
 };
