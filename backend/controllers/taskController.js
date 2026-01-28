@@ -191,9 +191,8 @@ if (!title) {
 return res.status(400).json({ success: false, message: 'Subtask title required' });
 }
 
-// ✅ ✅ ✅ COMPAT SUBTASK FIELD (AJOUT)
-// Ton model utilise isCompleted, mais ici on gardait completed.
-// On ajoute isCompleted pour que ça marche avec le modèle.
+// ✅ ✅ ✅ COMPAT MODEL (AJOUT)
+// Le modèle utilise isCompleted, mais ici on gardait completed
 task.subtasks.push({ title, completed: false, isCompleted: false });
 
 await task.save();
@@ -218,8 +217,8 @@ if (!task) return res.status(404).json({ success: false, message: 'Task not foun
 const subtask = task.subtasks.id(subtaskId);
 if (!subtask) return res.status(404).json({ success: false, message: 'Subtask not found' });
 
-// ✅ ✅ ✅ COMPAT SUBTASK FIELD (AJOUT)
-// On bascule isCompleted (champ du modèle) + on garde completed si existant.
+// ✅ ✅ ✅ COMPAT MODEL (AJOUT)
+// On bascule isCompleted (champ du modèle) + on garde completed si existant
 subtask.isCompleted = !subtask.isCompleted;
 subtask.completed = subtask.isCompleted;
 
@@ -254,7 +253,7 @@ const fileData = {
 filename: req.file.filename,
 originalName: req.file.originalname,
 
-// ✅ ✅ ✅ COMPAT MODEL FIELD (AJOUT)
+// ✅ ✅ ✅ COMPAT MODEL (AJOUT)
 // Le modèle utilise "mimetype" (pas "mimeType")
 mimetype: req.file.mimetype,
 mimeType: req.file.mimetype,
