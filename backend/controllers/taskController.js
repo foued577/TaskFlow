@@ -245,8 +245,10 @@ return res.status(400).json({ success: false, message: 'No file uploaded' });
 const fileData = {
 filename: req.file.filename,
 originalName: req.file.originalname,
-mimeType: req.file.mimetype,
+mimetype: req.file.mimetype,
 size: req.file.size,
+path: req.file.path,
+uploadedBy: req.user.id,
 uploadedAt: new Date()
 };
 
@@ -309,13 +311,20 @@ error: err.message
 // =====================================================
 exports.archiveTask = async (req, res) => {
 try {
-const task = await Task.findByIdAndUpdate(
-req.params.id,
-{ archived: true },
-{ new: true }
-);
-
+const task = await Task.findById(req.params.id);
 if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
+
+if (req.user.role !== 'admin') {
+const isAssigned = task.assignedTo.some(u => u.toString() === req.user.id);
+const isCreator = task.createdBy.toString() === req.user.id;
+
+if (!isAssigned && !isCreator) {
+return res.status(403).json({ success: false, message: 'Not authorized' });
+}
+}
+
+task.archived = true;
+await task.save();
 
 res.status(200).json({ success: true, message: 'Task archived', data: task });
 } catch (err) {
@@ -328,13 +337,20 @@ res.status(500).json({ success: false, message: 'Error archiving task', error: e
 // =====================================================
 exports.unarchiveTask = async (req, res) => {
 try {
-const task = await Task.findByIdAndUpdate(
-req.params.id,
-{ archived: false },
-{ new: true }
-);
-
+const task = await Task.findById(req.params.id);
 if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
+
+if (req.user.role !== 'admin') {
+const isAssigned = task.assignedTo.some(u => u.toString() === req.user.id);
+const isCreator = task.createdBy.toString() === req.user.id;
+
+if (!isAssigned && !isCreator) {
+return res.status(403).json({ success: false, message: 'Not authorized' });
+}
+}
+
+task.archived = false;
+await task.save();
 
 res.status(200).json({ success: true, message: 'Task restored', data: task });
 } catch (err) {
