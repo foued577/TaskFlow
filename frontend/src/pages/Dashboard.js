@@ -16,7 +16,7 @@ import { formatDistanceToNow } from "date-fns";
 import { fr } from "date-fns/locale";
 
 // ✅ ✅ ✅ AJOUT LOGO
-import taskflowLogo from "../assets/taskflow-logo-transparent.png";
+import taskflowLogo from "C:\Users\Foued\Downloads\logotaskflow.png";
 
 const Dashboard = () => {
 const { user } = useAuth();
