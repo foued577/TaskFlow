@@ -74,7 +74,7 @@ return (
 <img
 src={taskflowLogo}
 alt="TaskFlow"
-className="h-8 w-auto"
+className="h-20 w-auto"
 draggable={false}
 />
 </RouterLink>
