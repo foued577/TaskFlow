@@ -46,7 +46,7 @@ draggable={false}
 />
 </div>
 
-<h1 className="text-3xl font-bold text-gray-900 mb-2">/h1>
+<h1 className="text-3xl font-bold text-gray-900 mb-2">TaskFlow</h1>
 <p className="text-gray-600">Connectez-vous à votre compte</p>
 </div>
 
