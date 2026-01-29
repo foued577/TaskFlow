@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { LogIn, Mail, Lock, Loader2 } from 'lucide-react';
 
-// ✅ ✅ ✅ AJOUT LOGO (doit exister dans: frontend/src/assets/logotaskflow.png)
+// ✅ LOGO
 import taskflowLogo from '../assets/logotaskflow.png';
 
 const Login = () => {
@@ -27,7 +27,7 @@ setLoading(false);
 
 return (
 <div className="min-h-screen relative flex items-center justify-center overflow-hidden px-4">
-{/* ✅ ✅ ✅ BACKGROUND LIKE YOUR IMAGE */}
+{/* BACKGROUND */}
 <div className="absolute inset-0 bg-gradient-to-br from-blue-600 via-purple-600 to-pink-500" />
 <div className="absolute -top-40 -left-40 w-[520px] h-[520px] bg-white/10 rounded-full blur-3xl" />
 <div className="absolute -bottom-40 -right-40 w-[520px] h-[520px] bg-black/10 rounded-full blur-3xl" />
@@ -36,17 +36,17 @@ return (
 <div className="relative max-w-md w-full">
 <div className="bg-white rounded-2xl shadow-2xl p-8">
 <div className="text-center mb-8">
-{/* ✅ ✅ ✅ LOGO */}
+{/* LOGO */}
 <div className="flex items-center justify-center mb-4">
 <img
 src={taskflowLogo}
 alt="TaskFlow"
-className="h-auto w-auto"
+className="h-16 w-auto"
 draggable={false}
 />
 </div>
 
-<h1 className="text-3xl font-bold text-gray-900 mb-2">TaskFlow</h1>
+{/* ❌ SUPPRIMÉ : TaskFlow */}
 <p className="text-gray-600">Connectez-vous à votre compte</p>
 </div>
 
@@ -56,7 +56,7 @@ draggable={false}
 Email
 </label>
 <div className="relative">
-<Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+<Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
 <input
 type="email"
 value={email}
@@ -73,7 +73,7 @@ required
 Mot de passe
 </label>
 <div className="relative">
-<Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+<Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
 <input
 type="password"
 value={password}
@@ -107,7 +107,10 @@ Se connecter
 <div className="mt-6 text-center">
 <p className="text-sm text-gray-600">
 Pas encore de compte ?{' '}
-<Link to="/register" className="font-medium text-primary-600 hover:text-primary-700">
+<Link
+to="/register"
+className="font-medium text-primary-600 hover:text-primary-700"
+>
 Créer un compte
 </Link>
 </p>
