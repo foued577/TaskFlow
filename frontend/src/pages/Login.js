@@ -41,7 +41,7 @@ return (
 <img
 src={taskflowLogo}
 alt="TaskFlow"
-className="h-16 w-auto"
+className="h-auto w-auto"
 draggable={false}
 />
 </div>
