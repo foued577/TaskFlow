@@ -107,7 +107,7 @@ return (
 <img
 src={taskflowLogo}
 alt="TaskFlow"
-className="h-auto w-auto"
+className="h-8 w-auto"
 draggable={false}
 />
 <div>
