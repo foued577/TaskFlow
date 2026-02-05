@@ -1,5 +1,6 @@
-const Task = require('../models/Task');
-const Project = require('../models/Project');
+// backend/controllers/taskController.js
+const Task = require("../models/Task");
+const Project = require("../models/Project");
 
 // =====================================================
 // GET ALL TASKS
@@ -7,7 +8,11 @@ const Project = require('../models/Project');
 exports.getTasks = async (req, res) => {
 try {
 const userId = req.user.id;
-const role = req.user.role || 'admin';
+const role = req.user.role || "admin";
+
+// ✅ ✅ ✅ SUPERADMIN (AJOUT)
+const isSuperAdmin = role === "superadmin";
+
 let filters = {};
 let q = { ...req.query };
 
@@ -23,38 +28,39 @@ if (q.projectId) filters.project = q.projectId;
 // ✅ ✅ ✅ ARCHIVE FILTER (AJOUT)
 // /tasks -> non archivées
 // /tasks?archived=true -> archivées
-if (q.archived === 'true' || q.archived === true) {
+if (q.archived === "true" || q.archived === true) {
 filters.archived = true;
 } else {
 filters.archived = { $ne: true };
 }
 
 // Role filtering
-if (role !== 'admin') {
-filters.$or = [
-{ assignedTo: userId },
-{ createdBy: userId }
-];
+// ✅ ✅ ✅ admin + member filtrés / superadmin voit tout (AJOUT)
+if (!isSuperAdmin) {
+filters.$or = [{ assignedTo: userId }, { createdBy: userId }];
 }
 
-if (q.filterType === 'assignedToMe') {
+if (q.filterType === "assignedToMe") {
 filters.assignedTo = userId;
 }
 
-if (q.filterType === 'createdByMeNotAssignedToMe') {
+if (q.filterType === "createdByMeNotAssignedToMe") {
 filters.createdBy = userId;
 filters.assignedTo = { $ne: userId };
 }
 
 const tasks = await Task.find(filters)
-.populate('assignedTo', 'firstName lastName email')
-.populate('project', 'name color')
+.populate("assignedTo", "firstName lastName email")
+.populate("project", "name color")
 .sort({ createdAt: -1 });
 
 res.status(200).json({ success: true, data: tasks });
-
 } catch (err) {
-res.status(500).json({ success: false, message: 'Error fetching tasks', error: err.message });
+res.status(500).json({
+success: false,
+message: "Error fetching tasks",
+error: err.message,
+});
 }
 };
 
@@ -63,25 +69,39 @@ res.status(500).json({ success: false, message: 'Error fetching tasks', error: e
 // =====================================================
 exports.getTask = async (req, res) => {
 try {
+const role = req.user.role || "admin";
+
+// ✅ ✅ ✅ SUPERADMIN (AJOUT)
+const isSuperAdmin = role === "superadmin";
+
 const task = await Task.findById(req.params.id)
-.populate('assignedTo', 'firstName lastName email')
-.populate('project', 'name color');
+.populate("assignedTo", "firstName lastName email")
+.populate("project", "name color");
 
-if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
+if (!task)
+return res.status(404).json({ success: false, message: "Task not found" });
 
-if (req.user.role !== 'admin') {
-const isAssigned = task.assignedTo.some(u => u.toString() === req.user.id);
+// ✅ ✅ ✅ superadmin seul voit tout (AJOUT)
+if (!isSuperAdmin) {
+const isAssigned = task.assignedTo.some(
+(u) => u.toString() === req.user.id
+);
 const isCreator = task.createdBy.toString() === req.user.id;
 
 if (!isAssigned && !isCreator) {
-return res.status(403).json({ success: false, message: 'Not authorized' });
+return res
+.status(403)
+.json({ success: false, message: "Not authorized" });
 }
 }
 
 res.status(200).json({ success: true, data: task });
-
 } catch (err) {
-res.status(500).json({ success: false, message: 'Error fetching task', error: err.message });
+res.status(500).json({
+success: false,
+message: "Error fetching task",
+error: err.message,
+});
 }
 };
 
@@ -90,22 +110,31 @@ res.status(500).json({ success: false, message: 'Error fetching task', error: er
 // =====================================================
 exports.createTask = async (req, res) => {
 try {
-const { title, description, projectId, assignedTo, priority, status, dueDate } = req.body;
+const role = req.user.role || "admin";
+
+// ✅ ✅ ✅ SUPERADMIN (AJOUT)
+const isSuperAdmin = role === "superadmin";
+
+const { title, description, projectId, assignedTo, priority, status, dueDate } =
+req.body;
 
 const project = await Project.findById(projectId);
 if (!project) {
-return res.status(404).json({ success: false, message: 'Project not found' });
+return res
+.status(404)
+.json({ success: false, message: "Project not found" });
 }
 
-if (req.user.role !== 'admin') {
-const userTeamIds = req.user.teams?.map(t => t.toString()) || [];
-const projectTeams = project.teams?.map(t => t.toString()) || [];
+// ✅ ✅ ✅ admin + member passent par la vérif / superadmin bypass (AJOUT)
+if (!isSuperAdmin) {
+const userTeamIds = req.user.teams?.map((t) => t.toString()) || [];
+const projectTeams = project.teams?.map((t) => t.toString()) || [];
 
-const allowed = projectTeams.some(t => userTeamIds.includes(t));
+const allowed = projectTeams.some((t) => userTeamIds.includes(t));
 if (!allowed) {
 return res.status(403).json({
 success: false,
-message: 'Not authorized to create a task in this project'
+message: "Not authorized to create a task in this project",
 });
 }
 }
@@ -118,13 +147,16 @@ assignedTo,
 priority,
 status,
 dueDate,
-createdBy: req.user.id
+createdBy: req.user.id,
 });
 
 res.status(201).json({ success: true, data: task });
-
 } catch (err) {
-res.status(500).json({ success: false, message: 'Error creating task', error: err.message });
+res.status(500).json({
+success: false,
+message: "Error creating task",
+error: err.message,
+});
 }
 };
 
@@ -133,17 +165,28 @@ res.status(500).json({ success: false, message: 'Error creating task', error: er
 // =====================================================
 exports.updateTask = async (req, res) => {
 try {
+const role = req.user.role || "admin";
+
+// ✅ ✅ ✅ SUPERADMIN (AJOUT)
+const isSuperAdmin = role === "superadmin";
+
 const updates = { ...req.body };
 
 const task = await Task.findById(req.params.id);
-if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
+if (!task)
+return res.status(404).json({ success: false, message: "Task not found" });
 
-if (req.user.role !== 'admin') {
-const isAssigned = task.assignedTo.some(u => u.toString() === req.user.id);
+// ✅ ✅ ✅ superadmin bypass / admin+member vérif (AJOUT)
+if (!isSuperAdmin) {
+const isAssigned = task.assignedTo.some(
+(u) => u.toString() === req.user.id
+);
 const isCreator = task.createdBy.toString() === req.user.id;
 
 if (!isAssigned && !isCreator) {
-return res.status(403).json({ success: false, message: 'Not authorized' });
+return res
+.status(403)
+.json({ success: false, message: "Not authorized" });
 }
 }
 
@@ -151,9 +194,12 @@ Object.assign(task, updates);
 await task.save();
 
 res.status(200).json({ success: true, data: task });
-
 } catch (err) {
-res.status(500).json({ success: false, message: 'Error updating task', error: err.message });
+res.status(500).json({
+success: false,
+message: "Error updating task",
+error: err.message,
+});
 }
 };
 
@@ -162,19 +208,31 @@ res.status(500).json({ success: false, message: 'Error updating task', error: er
 // =====================================================
 exports.deleteTask = async (req, res) => {
 try {
-const task = await Task.findById(req.params.id);
-if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
+const role = req.user.role || "admin";
 
-if (req.user.role !== 'admin' && task.createdBy.toString() !== req.user.id) {
-return res.status(403).json({ success: false, message: 'Not authorized' });
+// ✅ ✅ ✅ SUPERADMIN (AJOUT)
+const isSuperAdmin = role === "superadmin";
+
+const task = await Task.findById(req.params.id);
+if (!task)
+return res.status(404).json({ success: false, message: "Task not found" });
+
+// ✅ ✅ ✅ superadmin bypass / sinon même règle qu'avant (AJOUT)
+if (!isSuperAdmin && task.createdBy.toString() !== req.user.id) {
+return res
+.status(403)
+.json({ success: false, message: "Not authorized" });
 }
 
 await task.deleteOne();
 
-res.status(200).json({ success: true, message: 'Task deleted' });
-
+res.status(200).json({ success: true, message: "Task deleted" });
 } catch (err) {
-res.status(500).json({ success: false, message: 'Error deleting task', error: err.message });
+res.status(500).json({
+success: false,
+message: "Error deleting task",
+error: err.message,
+});
 }
 };
 
@@ -184,11 +242,14 @@ res.status(500).json({ success: false, message: 'Error deleting task', error: er
 exports.addSubtask = async (req, res) => {
 try {
 const task = await Task.findById(req.params.id);
-if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
+if (!task)
+return res.status(404).json({ success: false, message: "Task not found" });
 
 const title = req.body.title;
 if (!title) {
-return res.status(400).json({ success: false, message: 'Subtask title required' });
+return res
+.status(400)
+.json({ success: false, message: "Subtask title required" });
 }
 
 // ✅ ✅ ✅ COMPAT MODEL (AJOUT)
@@ -198,9 +259,12 @@ task.subtasks.push({ title, completed: false, isCompleted: false });
 await task.save();
 
 res.status(200).json({ success: true, data: task });
-
 } catch (err) {
-res.status(500).json({ success: false, message: 'Error adding subtask', error: err.message });
+res.status(500).json({
+success: false,
+message: "Error adding subtask",
+error: err.message,
+});
 }
 };
 
@@ -212,10 +276,14 @@ try {
 const { id, subtaskId } = req.params;
 
 const task = await Task.findById(id);
-if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
+if (!task)
+return res.status(404).json({ success: false, message: "Task not found" });
 
 const subtask = task.subtasks.id(subtaskId);
-if (!subtask) return res.status(404).json({ success: false, message: 'Subtask not found' });
+if (!subtask)
+return res
+.status(404)
+.json({ success: false, message: "Subtask not found" });
 
 // ✅ ✅ ✅ COMPAT MODEL (AJOUT)
 // On bascule isCompleted (champ du modèle) + on garde completed si existant
@@ -225,12 +293,11 @@ subtask.completed = subtask.isCompleted;
 await task.save();
 
 res.status(200).json({ success: true, data: task });
-
 } catch (err) {
 res.status(500).json({
 success: false,
-message: 'Error toggling subtask',
-error: err.message
+message: "Error toggling subtask",
+error: err.message,
 });
 }
 };
@@ -242,11 +309,15 @@ exports.uploadAttachment = async (req, res) => {
 try {
 const task = await Task.findById(req.params.id);
 if (!task) {
-return res.status(404).json({ success: false, message: 'Task not found' });
+return res
+.status(404)
+.json({ success: false, message: "Task not found" });
 }
 
 if (!req.file) {
-return res.status(400).json({ success: false, message: 'No file uploaded' });
+return res
+.status(400)
+.json({ success: false, message: "No file uploaded" });
 }
 
 const fileData = {
@@ -259,7 +330,7 @@ mimetype: req.file.mimetype,
 mimeType: req.file.mimetype,
 
 size: req.file.size,
-uploadedAt: new Date()
+uploadedAt: new Date(),
 };
 
 task.attachments.push(fileData);
@@ -267,15 +338,14 @@ await task.save();
 
 res.status(200).json({
 success: true,
-message: 'File uploaded successfully',
-data: fileData
+message: "File uploaded successfully",
+data: fileData,
 });
-
 } catch (err) {
 res.status(500).json({
 success: false,
-message: 'Error uploading attachment',
-error: err.message
+message: "Error uploading attachment",
+error: err.message,
 });
 }
 };
@@ -285,35 +355,40 @@ error: err.message
 // =====================================================
 exports.getOverdueTasks = async (req, res) => {
 try {
+const role = req.user.role || "admin";
+
+// ✅ ✅ ✅ SUPERADMIN (AJOUT)
+const isSuperAdmin = role === "superadmin";
+
 const now = new Date();
 
 const filters = {
 dueDate: { $lt: now },
-status: { $ne: 'completed' },
+status: { $ne: "completed" },
 
 // ✅ ✅ ✅ EXCLUDE ARCHIVED (AJOUT)
-archived: { $ne: true }
+archived: { $ne: true },
 };
 
-if (req.user.role !== 'admin') {
+// ✅ ✅ ✅ admin aussi filtré / superadmin voit tout (AJOUT)
+if (!isSuperAdmin) {
 filters.assignedTo = req.user.id;
 }
 
 const tasks = await Task.find(filters)
-.populate('assignedTo', 'firstName lastName email')
-.populate('project', 'name');
+.populate("assignedTo", "firstName lastName email")
+.populate("project", "name");
 
 res.status(200).json({
 success: true,
 count: tasks.length,
-data: tasks
+data: tasks,
 });
-
 } catch (err) {
 res.status(500).json({
 success: false,
-message: 'Error fetching overdue tasks',
-error: err.message
+message: "Error fetching overdue tasks",
+error: err.message,
 });
 }
 };
@@ -323,25 +398,41 @@ error: err.message
 // =====================================================
 exports.archiveTask = async (req, res) => {
 try {
-const task = await Task.findById(req.params.id);
-if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
+const role = req.user.role || "admin";
 
-if (req.user.role !== 'admin') {
-const isAssigned = task.assignedTo.some(u => u.toString() === req.user.id);
+// ✅ ✅ ✅ SUPERADMIN (AJOUT)
+const isSuperAdmin = role === "superadmin";
+
+const task = await Task.findById(req.params.id);
+if (!task)
+return res.status(404).json({ success: false, message: "Task not found" });
+
+// ✅ ✅ ✅ superadmin bypass / admin+member vérif (AJOUT)
+if (!isSuperAdmin) {
+const isAssigned = task.assignedTo.some(
+(u) => u.toString() === req.user.id
+);
 const isCreator = task.createdBy.toString() === req.user.id;
 
 if (!isAssigned && !isCreator) {
-return res.status(403).json({ success: false, message: 'Not authorized' });
+return res
+.status(403)
+.json({ success: false, message: "Not authorized" });
 }
 }
 
 task.archived = true;
 await task.save();
 
-res.status(200).json({ success: true, message: 'Task archived', data: task });
-
+res
+.status(200)
+.json({ success: true, message: "Task archived", data: task });
 } catch (err) {
-res.status(500).json({ success: false, message: 'Error archiving task', error: err.message });
+res.status(500).json({
+success: false,
+message: "Error archiving task",
+error: err.message,
+});
 }
 };
 
@@ -350,24 +441,40 @@ res.status(500).json({ success: false, message: 'Error archiving task', error: e
 // =====================================================
 exports.unarchiveTask = async (req, res) => {
 try {
-const task = await Task.findById(req.params.id);
-if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
+const role = req.user.role || "admin";
 
-if (req.user.role !== 'admin') {
-const isAssigned = task.assignedTo.some(u => u.toString() === req.user.id);
+// ✅ ✅ ✅ SUPERADMIN (AJOUT)
+const isSuperAdmin = role === "superadmin";
+
+const task = await Task.findById(req.params.id);
+if (!task)
+return res.status(404).json({ success: false, message: "Task not found" });
+
+// ✅ ✅ ✅ superadmin bypass / admin+member vérif (AJOUT)
+if (!isSuperAdmin) {
+const isAssigned = task.assignedTo.some(
+(u) => u.toString() === req.user.id
+);
 const isCreator = task.createdBy.toString() === req.user.id;
 
 if (!isAssigned && !isCreator) {
-return res.status(403).json({ success: false, message: 'Not authorized' });
+return res
+.status(403)
+.json({ success: false, message: "Not authorized" });
 }
 }
 
 task.archived = false;
 await task.save();
 
-res.status(200).json({ success: true, message: 'Task restored', data: task });
-
+res
+.status(200)
+.json({ success: true, message: "Task restored", data: task });
 } catch (err) {
-res.status(500).json({ success: false, message: 'Error restoring task', error: err.message });
+res.status(500).json({
+success: false,
+message: "Error restoring task",
+error: err.message,
+});
 }
 };
