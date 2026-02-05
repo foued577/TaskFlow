@@ -1,6 +1,11 @@
 const Project = require('../models/Project');
 const Team = require('../models/Team');
 
+// ✅ AJOUT : SuperAdmin = role undefined/null -> voit tout
+const isSuperAdmin = (user) => {
+return user.role === undefined || user.role === null;
+};
+
 // Helper : déterminer si l'utilisateur est admin global
 const isGlobalAdmin = (user) => {
 return !user.role || user.role === 'admin';
@@ -15,7 +20,10 @@ exports.getProjects = async (req, res) => {
 try {
 let query = {};
 
-if (!isGlobalAdmin(req.user)) {
+// ✅ AJOUT : admin normal doit être filtré aussi (superadmin garde tout)
+const forceTeamFilter = req.user.role === 'admin' && !isSuperAdmin(req.user);
+
+if (!isGlobalAdmin(req.user) || forceTeamFilter) {
 // 🔐 Membre : on récupère d'abord ses équipes
 const userTeams = await Team.find({ 'members.user': req.user.id }).select('_id');
 const teamIds = userTeams.map((t) => t._id);
@@ -76,8 +84,11 @@ message: 'Project not found',
 });
 }
 
+// ✅ AJOUT : admin normal doit être filtré aussi (superadmin garde tout)
+const forceTeamFilter = req.user.role === 'admin' && !isSuperAdmin(req.user);
+
 // Admin global → accès complet
-if (!isGlobalAdmin(req.user)) {
+if (!isGlobalAdmin(req.user) || forceTeamFilter) {
 // Récupérer les équipes du user
 const userTeams = await Team.find({ 'members.user': req.user.id }).select('_id');
 const userTeamIds = userTeams.map((t) => t._id.toString());
