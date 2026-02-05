@@ -5,6 +5,7 @@ const User = require("../models/User");
 Helper : vérifier admin global OU admin d'équipe
 ---------------------------------------------------------------- */
 const isTeamAdmin = (team, userId, userRole) => {
+if (userRole === "superadmin") return true; // ✅ superadmin global
 if (userRole === "admin") return true; // admin global
 
 const member = team.members.find((m) => {
@@ -16,13 +17,13 @@ return member && (member.role === "admin" || !member.role);
 };
 
 /* ---------------------------------------------------------------
-GET /api/teams → Toutes les équipes (admin) ou ses équipes (membre)
+GET /api/teams → Toutes les équipes (superadmin) ou ses équipes (admin+member)
 ---------------------------------------------------------------- */
 exports.getTeams = async (req, res) => {
 try {
 let teams;
 
-if (req.user.role === "admin") {
+if (req.user.role === "superadmin") {
 teams = await Team.find()
 .populate("members.user", "firstName lastName email avatar role")
 .populate("createdBy", "firstName lastName");
@@ -64,7 +65,7 @@ POST /api/teams → Créer une équipe (admin only)
 ---------------------------------------------------------------- */
 exports.createTeam = async (req, res) => {
 try {
-if (req.user.role !== "admin") {
+if (req.user.role !== "admin" && req.user.role !== "superadmin") {
 return res.status(403).json({
 success: false,
 message: "Only admins can create teams",
@@ -195,7 +196,7 @@ DELETE /api/teams/:id → Supprimer une équipe (ADMIN GLOBAL ONLY)
 ---------------------------------------------------------------- */
 exports.deleteTeam = async (req, res) => {
 try {
-if (req.user.role !== "admin") {
+if (req.user.role !== "admin" && req.user.role !== "superadmin") {
 return res.status(403).json({
 success: false,
 message: "Only admins can delete teams",
