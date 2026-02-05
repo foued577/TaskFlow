@@ -3,9 +3,14 @@ const UsefulLink = require("../models/UsefulLink");
 // GET ALL
 exports.getLinks = async (req, res) => {
 try {
-const filter = req.user.role === "admin"
-? {} // Admin → tout voir
-: { assignedTo: req.user.id }; // Membre → uniquement liens assignés
+// ✅ AJOUT : superadmin voit tout
+const isSuperAdmin = req.user.role === "superadmin";
+
+const filter = isSuperAdmin
+? {} // superadmin → tout voir
+: req.user.role === "admin"
+? { assignedTo: req.user.id } // admin → seulement ses liens
+: { assignedTo: req.user.id }; // member → uniquement liens assignés
 
 const links = await UsefulLink.find(filter)
 .populate("assignedTo", "firstName lastName email")
@@ -31,7 +36,7 @@ res.status(400).json({ success: false, message: error.message });
 }
 };
 
-// UPDATE (NEW)
+// UPDATE
 exports.updateLink = async (req, res) => {
 try {
 const link = await UsefulLink.findByIdAndUpdate(
