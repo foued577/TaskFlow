@@ -41,7 +41,8 @@ const role = user.role || "admin";
 req.user = {
 id: user._id,
 role, // admin | member | superadmin
-isSuperAdmin: role === "superadmin" // ✅ AJOUT
+isSuperAdmin: role === "superadmin", // ✅ AJOUT
+teams: user.teams || [] // ✅ ✅ ✅ AJOUT (pour filtrer projets/tâches par équipes)
 };
 
 next();
