@@ -178,10 +178,25 @@ projectTeams.some(t => userTeamIds.includes(t)) ||
 (legacyTeam && userTeamIds.includes(legacyTeam));
 
 if (!allowed) {
+// ✅ ✅ ✅ ULTIMATE FALLBACK (AJOUT)
+// Vérifie directement si l'admin est membre d'une des équipes du projet (teams ou legacy team)
+const projectTeamIdsForCheck = [
+...projectTeams,
+...(legacyTeam ? [legacyTeam] : [])
+];
+
+// si projet n'a aucun team => on bloque (comportement actuel)
+const isMemberOfProjectTeam = projectTeamIdsForCheck.length
+? await Team.exists({ _id: { $in: projectTeamIdsForCheck }, "members.user": req.user.id })
+: false;
+
+// ✅ ✅ ✅ MINI MODIF : on ne refuse QUE si pas membre (sinon on laisse passer)
+if (!isMemberOfProjectTeam) {
 return res.status(403).json({
 success: false,
 message: 'Not authorized to create a task in this project'
 });
+}
 }
 }
 
