@@ -82,6 +82,13 @@ createdBy: req.user.id,
 members: [{ user: req.user.id, role: "admin" }],
 });
 
+// ✅ ✅ ✅ SYNC User.teams (AJOUT)
+await User.findByIdAndUpdate(
+req.user.id,
+{ $addToSet: { teams: team._id } },
+{ new: true }
+);
+
 res.status(201).json({ success: true, data: team });
 } catch (error) {
 console.error("Create team error:", error);
@@ -148,6 +155,13 @@ return res
 team.members.push({ user: userId });
 await team.save();
 
+// ✅ ✅ ✅ SYNC User.teams (AJOUT)
+await User.findByIdAndUpdate(
+userId,
+{ $addToSet: { teams: team._id } },
+{ new: true }
+);
+
 res.status(200).json({
 success: true,
 message: "Member added",
@@ -179,6 +193,13 @@ team.members = team.members.filter(
 );
 
 await team.save();
+
+// ✅ ✅ ✅ SYNC User.teams (AJOUT)
+await User.findByIdAndUpdate(
+userId,
+{ $pull: { teams: team._id } },
+{ new: true }
+);
 
 res.status(200).json({
 success: true,
