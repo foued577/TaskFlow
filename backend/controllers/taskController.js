@@ -1,5 +1,8 @@
+// backend/controllers/taskController.js
 const Task = require('../models/Task');
 const Project = require('../models/Project');
+// ✅ ✅ ✅ AJOUT (pour fallback si req.user.teams est vide)
+const Team = require('../models/Team');
 
 // =====================================================
 // GET ALL TASKS
@@ -29,14 +32,39 @@ filters.archived = true;
 filters.archived = { $ne: true };
 }
 
-// ✅ ✅ ✅ ADMIN SCOPING (MODIF MINIMALE)
-// admin (pas superadmin) voit seulement tâches assignées à lui
+// ✅ ✅ ✅ ADMIN SCOPING BY TEAMS (AJOUT)
+// admin (pas superadmin) voit seulement tâches des projets de ses équipes
+// + tâches assignées à lui
 if (role === 'admin' && !req.user.isSuperAdmin) {
-filters.assignedTo = userId;
+let userTeamIds = (req.user.teams || []).map(t => t.toString());
 
-// si le front envoie projectId, on garde aussi assignedTo (intersection)
+// ✅ ✅ ✅ FALLBACK si User.teams pas à jour (AJOUT)
+if (!userTeamIds || userTeamIds.length === 0) {
+const teams = await Team.find({ "members.user": req.user.id }).select("_id");
+userTeamIds = teams.map(t => t._id.toString());
+}
+
+// projets accessibles par ses équipes (teams ou legacy team)
+const allowedProjects = await Project.find({
+$or: [
+{ teams: { $in: userTeamIds } },
+{ team: { $in: userTeamIds } }
+]
+}).select('_id');
+
+const allowedProjectIds = allowedProjects.map(p => p._id);
+
+// si le front filtre par projectId, on vérifie qu'il est dans ses projets
 if (filters.project) {
-filters.project = filters.project;
+const projId = filters.project.toString();
+const ok = allowedProjectIds.some(id => id.toString() === projId);
+if (!ok) {
+return res.status(200).json({ success: true, data: [] });
+}
+} else {
+// ✅ ✅ ✅ IMPORTANT : tu as dit "je veux juste les tâches assignées à moi"
+// => on garde uniquement assignedTo: userId (AJOUT)
+filters.assignedTo = userId;
 }
 }
 
@@ -80,11 +108,25 @@ const task = await Task.findById(req.params.id)
 
 if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
 
-// ✅ ✅ ✅ ADMIN ACCESS (MODIF MINIMALE)
-// admin (pas superadmin) -> accès seulement si assigné à lui
+// ✅ ✅ ✅ ADMIN ACCESS BY TEAM (AJOUT)
 if ((req.user.role === 'admin' && !req.user.isSuperAdmin)) {
+let userTeamIds = (req.user.teams || []).map(t => t.toString());
+
+// ✅ ✅ ✅ FALLBACK si User.teams pas à jour (AJOUT)
+if (!userTeamIds || userTeamIds.length === 0) {
+const teams = await Team.find({ "members.user": req.user.id }).select("_id");
+userTeamIds = teams.map(t => t._id.toString());
+}
+
+const projectTeamIds = [
+...((task.project?.teams || []).map(t => t.toString())),
+...(task.project?.team ? [task.project.team.toString()] : [])
+];
+
 const isAssignedToMe = task.assignedTo.some(u => u.toString() === req.user.id.toString());
-if (!isAssignedToMe) {
+const hasTeamAccess = projectTeamIds.some(id => userTeamIds.includes(id));
+
+if (!hasTeamAccess && !isAssignedToMe) {
 return res.status(403).json({ success: false, message: 'Not authorized' });
 }
 }
@@ -120,7 +162,14 @@ return res.status(404).json({ success: false, message: 'Project not found' });
 
 // ✅ ✅ ✅ ADMIN (pas superadmin) -> doit créer seulement dans ses équipes (AJOUT)
 if (req.user.role === 'admin' && !req.user.isSuperAdmin) {
-const userTeamIds = (req.user.teams || []).map(t => t.toString());
+let userTeamIds = (req.user.teams || []).map(t => t.toString());
+
+// ✅ ✅ ✅ FALLBACK si User.teams pas à jour (AJOUT)
+if (!userTeamIds || userTeamIds.length === 0) {
+const teams = await Team.find({ "members.user": req.user.id }).select("_id");
+userTeamIds = teams.map(t => t._id.toString());
+}
+
 const projectTeams = (project.teams || []).map(t => t.toString());
 const legacyTeam = project.team ? project.team.toString() : null;
 
@@ -178,10 +227,25 @@ const updates = { ...req.body };
 const task = await Task.findById(req.params.id).populate('project', 'teams team'); // ✅ AJOUT
 if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
 
-// ✅ ✅ ✅ ADMIN (pas superadmin) -> update seulement si assigné à lui (MODIF MINIMALE)
+// ✅ ✅ ✅ ADMIN (pas superadmin) -> update seulement si team access OU assigné à lui (AJOUT)
 if (req.user.role === 'admin' && !req.user.isSuperAdmin) {
+let userTeamIds = (req.user.teams || []).map(t => t.toString());
+
+// ✅ ✅ ✅ FALLBACK si User.teams pas à jour (AJOUT)
+if (!userTeamIds || userTeamIds.length === 0) {
+const teams = await Team.find({ "members.user": req.user.id }).select("_id");
+userTeamIds = teams.map(t => t._id.toString());
+}
+
+const projectTeamIds = [
+...((task.project?.teams || []).map(t => t.toString())),
+...(task.project?.team ? [task.project.team.toString()] : [])
+];
+
 const isAssignedToMe = task.assignedTo.some(u => u.toString() === req.user.id.toString());
-if (!isAssignedToMe) {
+const hasTeamAccess = projectTeamIds.some(id => userTeamIds.includes(id));
+
+if (!hasTeamAccess && !isAssignedToMe) {
 return res.status(403).json({ success: false, message: 'Not authorized' });
 }
 }
@@ -214,10 +278,22 @@ try {
 const task = await Task.findById(req.params.id).populate('project', 'teams team'); // ✅ AJOUT
 if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
 
-// ✅ ✅ ✅ ADMIN (pas superadmin) -> delete seulement si assigné à lui (MODIF MINIMALE)
+// ✅ ✅ ✅ ADMIN (pas superadmin) -> delete seulement si team access (AJOUT)
 if (req.user.role === 'admin' && !req.user.isSuperAdmin) {
-const isAssignedToMe = task.assignedTo.some(u => u.toString() === req.user.id.toString());
-if (!isAssignedToMe) {
+let userTeamIds = (req.user.teams || []).map(t => t.toString());
+
+// ✅ ✅ ✅ FALLBACK si User.teams pas à jour (AJOUT)
+if (!userTeamIds || userTeamIds.length === 0) {
+const teams = await Team.find({ "members.user": req.user.id }).select("_id");
+userTeamIds = teams.map(t => t._id.toString());
+}
+
+const projectTeamIds = [
+...((task.project?.teams || []).map(t => t.toString())),
+...(task.project?.team ? [task.project.team.toString()] : [])
+];
+const hasTeamAccess = projectTeamIds.some(id => userTeamIds.includes(id));
+if (!hasTeamAccess) {
 return res.status(403).json({ success: false, message: 'Not authorized' });
 }
 }
@@ -352,9 +428,30 @@ status: { $ne: 'completed' },
 archived: { $ne: true }
 };
 
-// ✅ ✅ ✅ ADMIN SCOPING (MODIF MINIMALE)
+// ✅ ✅ ✅ ADMIN SCOPING BY TEAMS (AJOUT)
 if (req.user.role === 'admin' && !req.user.isSuperAdmin) {
+let userTeamIds = (req.user.teams || []).map(t => t.toString());
+
+// ✅ ✅ ✅ FALLBACK si User.teams pas à jour (AJOUT)
+if (!userTeamIds || userTeamIds.length === 0) {
+const teams = await Team.find({ "members.user": req.user.id }).select("_id");
+userTeamIds = teams.map(t => t._id.toString());
+}
+
+const allowedProjects = await Project.find({
+$or: [
+{ teams: { $in: userTeamIds } },
+{ team: { $in: userTeamIds } }
+]
+}).select('_id');
+
+const allowedProjectIds = allowedProjects.map(p => p._id);
+
+// ✅ ✅ ✅ IMPORTANT : uniquement assignées à moi (AJOUT)
 filters.assignedTo = req.user.id;
+
+// (garde la compat : si tu veux aussi limiter au scope projets, ça ne casse rien)
+filters.project = { $in: allowedProjectIds };
 }
 
 if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
@@ -388,10 +485,25 @@ try {
 const task = await Task.findById(req.params.id).populate('project', 'teams team'); // ✅ AJOUT
 if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
 
-// ✅ ✅ ✅ ADMIN (pas superadmin) -> peut archiver seulement si assigné à lui (MODIF MINIMALE)
+// ✅ ✅ ✅ ADMIN (pas superadmin) -> peut archiver seulement si team access OU assigné à lui (AJOUT)
 if (req.user.role === 'admin' && !req.user.isSuperAdmin) {
+let userTeamIds = (req.user.teams || []).map(t => t.toString());
+
+// ✅ ✅ ✅ FALLBACK si User.teams pas à jour (AJOUT)
+if (!userTeamIds || userTeamIds.length === 0) {
+const teams = await Team.find({ "members.user": req.user.id }).select("_id");
+userTeamIds = teams.map(t => t._id.toString());
+}
+
+const projectTeamIds = [
+...((task.project?.teams || []).map(t => t.toString())),
+...(task.project?.team ? [task.project.team.toString()] : [])
+];
+
 const isAssignedToMe = task.assignedTo.some(u => u.toString() === req.user.id.toString());
-if (!isAssignedToMe) {
+const hasTeamAccess = projectTeamIds.some(id => userTeamIds.includes(id));
+
+if (!hasTeamAccess && !isAssignedToMe) {
 return res.status(403).json({ success: false, message: 'Not authorized' });
 }
 }
@@ -424,10 +536,25 @@ try {
 const task = await Task.findById(req.params.id).populate('project', 'teams team'); // ✅ AJOUT
 if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
 
-// ✅ ✅ ✅ ADMIN (pas superadmin) -> peut restaurer seulement si assigné à lui (MODIF MINIMALE)
+// ✅ ✅ ✅ ADMIN (pas superadmin) -> peut restaurer seulement si team access OU assigné à lui (AJOUT)
 if (req.user.role === 'admin' && !req.user.isSuperAdmin) {
+let userTeamIds = (req.user.teams || []).map(t => t.toString());
+
+// ✅ ✅ ✅ FALLBACK si User.teams pas à jour (AJOUT)
+if (!userTeamIds || userTeamIds.length === 0) {
+const teams = await Team.find({ "members.user": req.user.id }).select("_id");
+userTeamIds = teams.map(t => t._id.toString());
+}
+
+const projectTeamIds = [
+...((task.project?.teams || []).map(t => t.toString())),
+...(task.project?.team ? [task.project.team.toString()] : [])
+];
+
 const isAssignedToMe = task.assignedTo.some(u => u.toString() === req.user.id.toString());
-if (!isAssignedToMe) {
+const hasTeamAccess = projectTeamIds.some(id => userTeamIds.includes(id));
+
+if (!hasTeamAccess && !isAssignedToMe) {
 return res.status(403).json({ success: false, message: 'Not authorized' });
 }
 }
