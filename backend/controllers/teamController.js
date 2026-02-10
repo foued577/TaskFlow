@@ -1,3 +1,4 @@
+// backend/controllers/teamController.js
 const Team = require("../models/Team");
 const User = require("../models/User");
 
@@ -188,9 +189,7 @@ if (!isTeamAdmin(team, req.user.id, req.user.role)) {
 return res.status(403).json({ success: false, message: "Not allowed" });
 }
 
-team.members = team.members.filter(
-(m) => m.user._id.toString() !== userId
-);
+team.members = team.members.filter((m) => m.user._id.toString() !== userId);
 
 await team.save();
 
