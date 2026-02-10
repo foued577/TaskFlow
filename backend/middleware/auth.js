@@ -1,5 +1,7 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+// ✅ ✅ ✅ AJOUT
+const Team = require('../models/Team');
 
 // ===============================
 // PROTECT MIDDLEWARE
@@ -38,11 +40,18 @@ message: 'User not found or inactive'
 // ===============================
 const role = user.role || "admin";
 
+// ✅ ✅ ✅ AJOUT (fallback teams depuis Team.members si user.teams vide)
+let teams = user.teams || [];
+if (!teams || teams.length === 0) {
+const userTeams = await Team.find({ "members.user": user._id }).select("_id");
+teams = userTeams.map(t => t._id);
+}
+
 req.user = {
 id: user._id,
 role, // admin | member | superadmin
 isSuperAdmin: role === "superadmin", // ✅ AJOUT
-teams: user.teams || [] // ✅ ✅ ✅ AJOUT (pour filtrer projets/tâches par équipes)
+teams // ✅ ✅ ✅ AJOUT (pour filtrer projets/tâches par équipes)
 };
 
 next();
