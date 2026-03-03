@@ -147,6 +147,8 @@ export const tasksAPI = {
     }),
 
   getOverdue: () => api.get("/tasks/overdue"),
+
+  getDuplicateDraft: (id) => api.get(`/tasks/${id}/duplicate-draft`), // ✅ AJOUT
 };
 
 // COMMENTS
