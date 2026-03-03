@@ -741,6 +741,8 @@ return {
 title: obj.title || obj.titre || '',
 description: obj.description || obj.desc || '',
 projectId: obj.projectid || obj.projetid || obj.projet || obj.project || '',
+// ✅ ✅ ✅ AJOUT : nom de projet (FR/EN)
+projectName: obj.projectname || obj.nomdeprojet || obj.projetnom || obj.projetname || obj.project || '',
 assignedToRaw: obj.assignedto || obj.assigne || obj.assignea || obj.assignera || '',
 priority: obj.priority || obj.priorite || 'medium',
 status: obj.status || obj.statut || 'not_started',
@@ -758,8 +760,16 @@ for (let i = 0; i < rows.length; i++) {
 const raw = mapRow(rows[i]);
 const rowNumber = i + 2; // +2 car ligne 1 = header
 
-if (!raw.title || !raw.projectId) {
-errors.push({ row: rowNumber, message: 'title/titre et projectId/projet sont obligatoires' });
+// ✅ ✅ ✅ AJOUT : si projectId vide mais nom fourni, on résout par nom
+if (!raw.projectId && raw.projectName) {
+const byName = await Project.findOne({
+name: { $regex: `^${String(raw.projectName).trim()}$`, $options: 'i' }
+}).select('_id');
+if (byName?._id) raw.projectId = byName._id.toString();
+}
+
+if (!raw.title || (!raw.projectId && !raw.projectName)) {
+errors.push({ row: rowNumber, message: 'title/titre et projectId/projet (ou nom de projet) sont obligatoires' });
 continue;
 }
 
