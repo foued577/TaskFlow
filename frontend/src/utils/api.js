@@ -149,6 +149,11 @@ export const tasksAPI = {
   getOverdue: () => api.get("/tasks/overdue"),
 
   getDuplicateDraft: (id) => api.get(`/tasks/${id}/duplicate-draft`), // ✅ AJOUT
+
+  importBulk: (formData) => // ✅ AJOUT
+    api.post("/tasks/import", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    }),
 };
 
 // COMMENTS
