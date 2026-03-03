@@ -15,6 +15,7 @@ getOverdueTasks,
 archiveTask, // ✅ AJOUT
 unarchiveTask, // ✅ AJOUT
 getDuplicateDraft, // ✅ AJOUT
+importTasksFromFile, // ✅ AJOUT
 } = require("../controllers/taskController");
 
 const { protect } = require("../middleware/auth");
@@ -35,6 +36,11 @@ router.put("/:id/unarchive", protect, unarchiveTask);
 // 🔥 DUPLICATE TASK (DRAFT)
 // =====================================
 router.get("/:id/duplicate-draft", protect, getDuplicateDraft);
+
+// =====================================
+// ✅ IMPORT TASKS FROM FILE (CSV/XLSX) (AJOUT)
+// =====================================
+router.post("/import", protect, upload.single("file"), importTasksFromFile);
 
 // =====================================
 // 🔥 GET ALL TASKS + CREATE
