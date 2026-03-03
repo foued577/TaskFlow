@@ -29,18 +29,20 @@ router.post("/import", protect, upload.single("file"), importTasksFromFile);
 
 // =====================================
 // ✅ TOTAL COUNT (AJOUT)
+// ⚠️ Doit être AVANT "/:id/..." sinon Express le prend pour un id
 // =====================================
 router.get("/total-count", protect, getTotalCount);
+
+// =====================================
+// 🔥 GET OVERDUE TASKS
+// ⚠️ Doit être AVANT "/:id/..." sinon Express le prend pour un id
+// =====================================
+router.get("/overdue", protect, getOverdueTasks);
 
 // =====================================
 // ✅ DUPLICATE TASK (DRAFT) (AJOUT)
 // =====================================
 router.get("/:id/duplicate-draft", protect, getDuplicateDraft);
-
-// =====================================
-// 🔥 GET OVERDUE TASKS
-// =====================================
-router.get("/overdue", protect, getOverdueTasks);
 
 // =====================================
 // ✅ ARCHIVE / UNARCHIVE (AJOUT)
