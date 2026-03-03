@@ -9,69 +9,27 @@ const fs = require('fs');
 const XLSX = require('xlsx');
 const User = require('../models/User');
 
-// ✅ ✅ ✅ AJOUT : CSV fallback sans dépendance (amélioré : ; , tab + guillemets)
+// ✅ ✅ ✅ AJOUT : pour vérifier ObjectId sans dépendance
+const mongoose = require('mongoose');
+
+// ✅ ✅ ✅ AJOUT : CSV fallback sans dépendance (gère "," et ";" + BOM)
 const parseCSVFallback = (content) => {
   const clean = String(content || '').replace(/^\uFEFF/, ''); // BOM
   const lines = clean
     .split(/\r?\n/)
     .map((l) => l.trim())
-    .filter(Boolean);
+    .filter((l) => l.length > 0);
 
   if (lines.length < 2) return [];
 
-  // ✅ Détecter le séparateur le plus probable (Excel FR => ;)
-  const detectDelimiter = (line) => {
-    const candidates = [',', ';', '\t'];
-    let best = ',';
-    let bestCount = -1;
-    for (const d of candidates) {
-      const count = (line.match(new RegExp(`\\${d}`, 'g')) || []).length;
-      if (count > bestCount) {
-        bestCount = count;
-        best = d;
-      }
-    }
-    return best;
-  };
+  // détecter séparateur
+  const headerLine = lines[0];
+  const sep = headerLine.includes(';') && !headerLine.includes(',') ? ';' : ',';
 
-  // ✅ Parser une ligne CSV avec guillemets ("") et séparateur dynamique
-  const parseLine = (line, delimiter) => {
-    const out = [];
-    let cur = '';
-    let inQuotes = false;
-
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-
-      if (ch === '"') {
-        // "" => échappement d'un guillemet
-        if (inQuotes && line[i + 1] === '"') {
-          cur += '"';
-          i++;
-        } else {
-          inQuotes = !inQuotes;
-        }
-        continue;
-      }
-
-      if (ch === delimiter && !inQuotes) {
-        out.push(cur.trim());
-        cur = '';
-        continue;
-      }
-
-      cur += ch;
-    }
-
-    out.push(cur.trim());
-    return out;
-  };
-
-  const delimiter = detectDelimiter(lines[0]);
-  const headers = parseLine(lines[0], delimiter).map((h) => h.trim());
+  const headers = headerLine.split(sep).map((h) => h.trim());
 
   return lines.slice(1).map((line) => {
-    const values = parseLine(line, delimiter);
+    const values = line.split(sep).map((v) => v.trim());
     const obj = {};
     headers.forEach((h, i) => {
       obj[h] = values[i] ?? '';
@@ -790,8 +748,6 @@ return {
 title: obj.title || obj.titre || '',
 description: obj.description || obj.desc || '',
 projectId: obj.projectid || obj.projetid || obj.projet || obj.project || '',
-// ✅ ✅ ✅ AJOUT : nom de projet (FR/EN)
-projectName: obj.projectname || obj.nomdeprojet || obj.projetnom || obj.projetname || '',
 assignedToRaw: obj.assignedto || obj.assigne || obj.assignea || obj.assignera || '',
 priority: obj.priority || obj.priorite || 'medium',
 status: obj.status || obj.statut || 'not_started',
@@ -809,21 +765,19 @@ for (let i = 0; i < rows.length; i++) {
 const raw = mapRow(rows[i]);
 const rowNumber = i + 2; // +2 car ligne 1 = header
 
-// ✅ ✅ ✅ AJOUT : si projectId vide mais nom fourni, on résout par nom
-if (!raw.projectId && raw.projectName) {
-const byName = await Project.findOne({
-name: { $regex: `^${String(raw.projectName).trim()}$`, $options: 'i' }
-}).select('_id');
-if (byName?._id) raw.projectId = byName._id.toString();
-}
-
-if (!raw.title || (!raw.projectId && !raw.projectName)) {
-errors.push({ row: rowNumber, message: 'title/titre et projectId/projet (ou nom de projet) sont obligatoires' });
+if (!raw.title || !raw.projectId) {
+errors.push({ row: rowNumber, message: 'title/titre et projectId/projet sont obligatoires' });
 continue;
 }
 
-// Projet existe ?
-const project = await Project.findById(raw.projectId);
+// ✅ ✅ ✅ Projet : accepte ID Mongo OU nom du projet (fallback)
+let project = null;
+if (mongoose.Types.ObjectId.isValid(String(raw.projectId))) {
+project = await Project.findById(raw.projectId);
+} else {
+project = await Project.findOne({ name: raw.projectId });
+}
+
 if (!project) {
 errors.push({ row: rowNumber, message: `Projet introuvable: ${raw.projectId}` });
 continue;
@@ -842,7 +796,8 @@ if (t.includes('@')) {
 const u = await User.findOne({ email: t }).select('_id');
 if (u?._id) assignedTo.push(u._id);
 } else {
-assignedTo.push(t);
+// ✅ ✅ ✅ si c'est un id mongo valide on le garde, sinon on ignore silencieusement
+if (mongoose.Types.ObjectId.isValid(String(t))) assignedTo.push(t);
 }
 }
 }
@@ -855,7 +810,7 @@ const tags = raw.tagsRaw
 const taskDoc = await Task.create({
 title: raw.title,
 description: raw.description,
-project: raw.projectId,
+project: project._id, // ✅ ✅ ✅ important : stocker l'id du projet
 assignedTo,
 priority: raw.priority || 'medium',
 status: raw.status || 'not_started',
