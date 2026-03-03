@@ -26,6 +26,9 @@ const isAdmin = !user?.role || user.role === "admin";
 
 const [loading, setLoading] = useState(true);
 
+// ✅ ✅ ✅ AJOUT : compteur global (toutes les tâches dans la base)
+const [totalTasksGlobal, setTotalTasksGlobal] = useState(0);
+
 const [stats, setStats] = useState({
 totalTasks: 0,
 inProgress: 0,
@@ -43,14 +46,20 @@ loadDashboardData();
 
 const loadDashboardData = async () => {
 try {
-const [tasksRes, projectsRes, teamsRes, overdueRes] = await Promise.all([
+const [tasksRes, projectsRes, teamsRes, overdueRes, totalCountRes] = await Promise.all([
+// ✅ ✅ ✅ AJOUT : garder ce call pour stats filtrées (rôle)
 tasksAPI.getAll(), // Backend filtre déjà en fonction du rôle
 projectsAPI.getAll(), // Backend filtre aussi pour les members
 teamsAPI.getAll(), // Idem, le backend renvoie seulement les équipes autorisées
 tasksAPI.getOverdue(),
+// ✅ ✅ ✅ AJOUT : total global base
+tasksAPI.getTotalCount(),
 ]);
 
 const tasks = tasksRes.data.data;
+
+// ✅ ✅ ✅ AJOUT : total global base
+setTotalTasksGlobal(totalCountRes?.data?.data?.total || 0);
 
 // === STATS AUTOMATIQUES (déjà filtré par backend)
 setStats({
@@ -162,6 +171,15 @@ Voir les projets
 <div className="rounded-xl bg-white/12 p-4 border border-white/10">
 <p className="text-xs text-white/80">En retard</p>
 <p className="mt-1 text-2xl font-extrabold">{stats.overdue}</p>
+</div>
+
+{/* ✅ ✅ ✅ AJOUT : total global base (visible seulement admin) */}
+{isAdmin && (
+<div className="rounded-xl bg-white/12 p-4 border border-white/10 col-span-2">
+<p className="text-xs text-white/80">Total tâches (base)</p>
+<p className="mt-1 text-2xl font-extrabold">{totalTasksGlobal}</p>
+</div>
+)}
 </div>
 </div>
 </div>
