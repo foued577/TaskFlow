@@ -33,6 +33,9 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
     tags: '',
   });
 
+  // ✅ ✅ ✅ AJOUT : EDIT MODE uniquement si _id existe
+  const isEditMode = !!task?._id;
+
   // Pour un affichage propre des assignés (objets utilisateurs)
   const [assignedUsers, setAssignedUsers] = useState([]); // [{_id, firstName, lastName, email, ...}]
 
@@ -106,7 +109,11 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
 
       // Sous-tâches et commentaires
       setSubtasks(task.subtasks || []);
-      await loadComments(task._id);
+
+      // ✅ ✅ ✅ AJOUT : ne charger les commentaires que si on est en mode édition
+      if (isEditMode) {
+        await loadComments(task._id);
+      }
     };
 
     fillFromTask();
@@ -140,7 +147,8 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
           : [],
       };
 
-      if (task) {
+      // ✅ ✅ ✅ AJOUT : EDIT uniquement si task._id existe (sinon duplication = création)
+      if (isEditMode) {
         await tasksAPI.update(task._id, payload);
         toast.success('Tâche mise à jour');
       } else {
@@ -344,7 +352,7 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
         {/* Header */}
         <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
           <h2 className="text-xl font-bold">
-            {task ? 'Modifier la tâche' : 'Nouvelle tâche'}
+            {isEditMode ? 'Modifier la tâche' : 'Nouvelle tâche'}
           </h2>
           <div className="flex items-center space-x-2">
             {task && (
@@ -796,7 +804,7 @@ const TaskModal = ({ task, projects, onClose, onSave }) => {
                 className="flex-1 btn btn-primary flex items-center justify-center"
               >
                 <Save className="w-5 h-5 mr-2" />
-                {task ? 'Mettre à jour' : 'Créer'}
+                {isEditMode ? 'Mettre à jour' : 'Créer'}
               </button>
               <button
                 type="button"
