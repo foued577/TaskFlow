@@ -14,6 +14,7 @@ uploadAttachment,
 getOverdueTasks,
 archiveTask, // ✅ AJOUT
 unarchiveTask, // ✅ AJOUT
+getDuplicateDraft, // ✅ AJOUT
 } = require("../controllers/taskController");
 
 const { protect } = require("../middleware/auth");
@@ -29,6 +30,11 @@ router.get("/overdue", protect, getOverdueTasks);
 // =====================================
 router.put("/:id/archive", protect, archiveTask);
 router.put("/:id/unarchive", protect, unarchiveTask);
+
+// =====================================
+// 🔥 DUPLICATE TASK (DRAFT)
+// =====================================
+router.get("/:id/duplicate-draft", protect, getDuplicateDraft);
 
 // =====================================
 // 🔥 GET ALL TASKS + CREATE
