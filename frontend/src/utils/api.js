@@ -154,6 +154,9 @@ export const tasksAPI = {
     api.post("/tasks/import", formData, {
       headers: { "Content-Type": "multipart/form-data" },
     }),
+
+  // ✅ AJOUT : compteur total en base (Dashboard)
+  getTotalCount: () => api.get("/tasks/total-count"),
 };
 
 // COMMENTS
