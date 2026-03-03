@@ -4,6 +4,12 @@ const Project = require('../models/Project');
 // ✅ ✅ ✅ AJOUT (pour fallback si req.user.teams est vide)
 const Team = require('../models/Team');
 
+// ✅ ✅ ✅ AJOUT IMPORT MASSIF
+const fs = require('fs');
+const XLSX = require('xlsx');
+const { parse } = require('csv-parse/sync');
+const User = require('../models/User');
+
 // =====================================================
 // ✅ DUPLICATE TASK (DRAFT) (AJOUT)
 // =====================================================
@@ -11,7 +17,7 @@ exports.getDuplicateDraft = async (req, res) => {
 try {
 const task = await Task.findById(req.params.id)
 .populate('assignedTo', 'firstName lastName email')
-.populate('project', 'name color teams team'); // ✅ cohérent avec getTask
+.populate('project', 'name color teams team');
 
 if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
 
@@ -56,10 +62,6 @@ delete draft.updatedAt;
 
 // Ajustements par défaut
 if (draft.title) draft.title = `Copie de - ${draft.title}`;
-
-// (optionnel) si tu veux éviter de copier les pièces jointes / sous-tâches, décommente :
-// draft.attachments = [];
-// draft.subtasks = [];
 
 res.status(200).json({ success: true, data: draft });
 
@@ -655,5 +657,153 @@ res.status(200).json({ success: true, message: 'Task restored', data: task });
 
 } catch (err) {
 res.status(500).json({ success: false, message: 'Error restoring task', error: err.message });
+}
+};
+
+// =====================================================
+// ✅ IMPORT TASKS FROM FILE (CSV/XLSX) (AJOUT)
+// =====================================================
+exports.importTasksFromFile = async (req, res) => {
+try {
+if (!req.file) {
+return res.status(400).json({ success: false, message: 'No file uploaded' });
+}
+
+const originalName = req.file.originalname || '';
+const lower = originalName.toLowerCase();
+const filePath = req.file.path;
+
+const normalizeKey = (s) =>
+String(s || '')
+.trim()
+.toLowerCase()
+.normalize('NFD')
+.replace(/[\u0300-\u036f]/g, '')
+.replace(/\s+/g, '');
+
+const toISODate = (val) => {
+if (!val) return '';
+if (val instanceof Date && !isNaN(val)) return val.toISOString();
+const d = new Date(val);
+if (!isNaN(d)) return d.toISOString();
+return '';
+};
+
+let rows = [];
+
+if (lower.endsWith('.xlsx') || lower.endsWith('.xls')) {
+const wb = XLSX.readFile(filePath);
+const sheetName = wb.SheetNames[0];
+const sheet = wb.Sheets[sheetName];
+rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+} else if (lower.endsWith('.csv')) {
+const content = fs.readFileSync(filePath, 'utf8');
+rows = parse(content, {
+columns: true,
+skip_empty_lines: true,
+bom: true,
+});
+} else {
+return res.status(400).json({
+success: false,
+message: 'Unsupported file type. Please upload a .csv or .xlsx file',
+});
+}
+
+// Nettoyage fichier temporaire (si besoin)
+try { fs.unlinkSync(filePath); } catch {}
+
+// Mapping des colonnes (FR/EN)
+const mapRow = (r) => {
+const obj = {};
+for (const k of Object.keys(r)) {
+obj[normalizeKey(k)] = r[k];
+}
+
+return {
+title: obj.title || obj.titre || '',
+description: obj.description || obj.desc || '',
+projectId: obj.projectid || obj.projetid || obj.projet || obj.project || '',
+assignedToRaw: obj.assignedto || obj.assigne || obj.assignea || obj.assignera || '',
+priority: obj.priority || obj.priorite || 'medium',
+status: obj.status || obj.statut || 'not_started',
+estimatedHours: obj.estimatedhours || obj.estimationheures || obj.estimation || 0,
+startDate: obj.startdate || obj.datededebut || obj.debut || '',
+dueDate: obj.duedate || obj.datedecheance || obj.echeance || '',
+tagsRaw: obj.tags || obj.tag || '',
+};
+};
+
+const created = [];
+const errors = [];
+
+for (let i = 0; i < rows.length; i++) {
+const raw = mapRow(rows[i]);
+const rowNumber = i + 2; // +2 car ligne 1 = header
+
+if (!raw.title || !raw.projectId) {
+errors.push({ row: rowNumber, message: 'title/titre et projectId/projet sont obligatoires' });
+continue;
+}
+
+// Projet existe ?
+const project = await Project.findById(raw.projectId);
+if (!project) {
+errors.push({ row: rowNumber, message: `Projet introuvable: ${raw.projectId}` });
+continue;
+}
+
+// assignedTo (IDs ou emails séparés par virgules)
+let assignedTo = [];
+if (raw.assignedToRaw) {
+const tokens = String(raw.assignedToRaw)
+.split(',')
+.map(s => s.trim())
+.filter(Boolean);
+
+for (const t of tokens) {
+if (t.includes('@')) {
+const u = await User.findOne({ email: t }).select('_id');
+if (u?._id) assignedTo.push(u._id);
+} else {
+assignedTo.push(t);
+}
+}
+}
+
+// tags
+const tags = raw.tagsRaw
+? String(raw.tagsRaw).split(',').map(t => t.trim()).filter(Boolean)
+: [];
+
+const taskDoc = await Task.create({
+title: raw.title,
+description: raw.description,
+project: raw.projectId,
+assignedTo,
+priority: raw.priority || 'medium',
+status: raw.status || 'not_started',
+estimatedHours: Number(raw.estimatedHours || 0),
+startDate: raw.startDate ? toISODate(raw.startDate) : undefined,
+dueDate: raw.dueDate ? toISODate(raw.dueDate) : undefined,
+tags,
+createdBy: req.user.id,
+});
+
+created.push(taskDoc);
+}
+
+return res.status(200).json({
+success: true,
+createdCount: created.length,
+errorCount: errors.length,
+errors,
+});
+} catch (err) {
+return res.status(500).json({
+success: false,
+message: 'Error importing tasks',
+error: err.message,
+});
 }
 };
