@@ -7,8 +7,29 @@ const Team = require('../models/Team');
 // ✅ ✅ ✅ AJOUT IMPORT MASSIF
 const fs = require('fs');
 const XLSX = require('xlsx');
-const { parse } = require('csv-parse/sync');
 const User = require('../models/User');
+
+// ✅ ✅ ✅ AJOUT : CSV fallback sans dépendance
+const parseCSVFallback = (content) => {
+  const clean = String(content || '').replace(/^\uFEFF/, ''); // BOM
+  const lines = clean
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  if (lines.length < 2) return [];
+
+  const headers = lines[0].split(',').map((h) => h.trim());
+
+  return lines.slice(1).map((line) => {
+    const values = line.split(',').map((v) => v.trim());
+    const obj = {};
+    headers.forEach((h, i) => {
+      obj[h] = values[i] || '';
+    });
+    return obj;
+  });
+};
 
 // =====================================================
 // ✅ DUPLICATE TASK (DRAFT) (AJOUT)
@@ -698,11 +719,7 @@ const sheet = wb.Sheets[sheetName];
 rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
 } else if (lower.endsWith('.csv')) {
 const content = fs.readFileSync(filePath, 'utf8');
-rows = parse(content, {
-columns: true,
-skip_empty_lines: true,
-bom: true,
-});
+rows = parseCSVFallback(content); // ✅ ✅ ✅ FALLBACK sans dépendance
 } else {
 return res.status(400).json({
 success: false,
