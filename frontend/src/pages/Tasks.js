@@ -11,6 +11,7 @@ Calendar as CalendarIcon,
 AlertCircle,
 Archive, // ✅ AJOUT
 RotateCcw, // ✅ AJOUT
+Copy, // ✅ AJOUT (duplication)
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Loading from "../components/Loading";
@@ -194,6 +195,22 @@ toast.success("Tâche restaurée");
 loadData();
 } catch {
 toast.error("Erreur lors de la restauration");
+}
+};
+
+// ✅ ✅ ✅ DUPLIQUER (AJOUT)
+const duplicateTask = async (taskId) => {
+if (!isAdmin) {
+toast.error("Vous n’avez pas les droits");
+return;
+}
+try {
+const res = await tasksAPI.getDuplicateDraft(taskId); // ✅ AJOUT
+const draft = res?.data?.data;
+setSelectedTask(draft); // ✅ ouvre le modal en mode "création" avec data pré-remplie
+setShowModal(true);
+} catch {
+toast.error("Erreur lors de la duplication");
 }
 };
 
@@ -481,6 +498,19 @@ task.archived
 <option value="in_progress">En cours</option>
 <option value="completed">Terminée</option>
 </select>
+
+{/* ✅ ✅ ✅ DUPLICATE BUTTON (AJOUT) */}
+<button
+onClick={(e) => {
+e.stopPropagation();
+duplicateTask(task._id);
+}}
+className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+title="Dupliquer"
+disabled={task.archived}
+>
+<Copy className="w-5 h-5" />
+</button>
 
 {/* ✅ ✅ ✅ ARCHIVE / RESTORE BUTTON */}
 {!task.archived ? (
