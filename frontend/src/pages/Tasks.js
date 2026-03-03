@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react"; // ✅ AJOUT useRef
 import { useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { tasksAPI, projectsAPI } from "../utils/api";
@@ -12,6 +12,7 @@ AlertCircle,
 Archive, // ✅ AJOUT
 RotateCcw, // ✅ AJOUT
 Copy, // ✅ AJOUT (duplication)
+Upload, // ✅ AJOUT (import)
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Loading from "../components/Loading";
@@ -36,6 +37,9 @@ const [search, setSearch] = useState("");
 
 // ✅ ✅ ✅ AJOUT MODE ARCHIVES
 const [showArchived, setShowArchived] = useState(false);
+
+// ✅ ✅ ✅ AJOUT IMPORT REF
+const fileInputRef = useRef(null);
 
 // MODAL
 const [showModal, setShowModal] = useState(false);
@@ -214,6 +218,37 @@ toast.error("Erreur lors de la duplication");
 }
 };
 
+// ✅ ✅ ✅ IMPORTER FICHIER (AJOUT)
+const importTasks = async (file) => {
+if (!isAdmin) {
+toast.error("Vous n’avez pas les droits");
+return;
+}
+if (!file) return;
+
+try {
+const fd = new FormData();
+fd.append("file", file);
+
+const res = await tasksAPI.importBulk(fd); // ✅ AJOUT
+const createdCount = res?.data?.createdCount ?? 0;
+const errorCount = res?.data?.errorCount ?? 0;
+
+toast.success(`Import terminé : ${createdCount} créées, ${errorCount} erreurs`);
+if (errorCount > 0) {
+const first = res?.data?.errors?.[0];
+if (first?.message) toast.info(`Exemple erreur (ligne ${first.row}) : ${first.message}`);
+}
+
+await loadData();
+} catch (e) {
+toast.error(e?.response?.data?.message || "Erreur lors de l'import");
+} finally {
+// reset input pour pouvoir re-importer le même fichier
+if (fileInputRef.current) fileInputRef.current.value = "";
+}
+};
+
 // COLORS
 const getPriorityColor = (priority) =>
 ({
@@ -275,6 +310,26 @@ title={showArchived ? "Voir tâches actives" : "Voir archives"}
 <Archive className="w-5 h-5 mr-2" />
 {showArchived ? "Actives" : "Archives"}
 </button>
+)}
+
+{/* ✅ ✅ ✅ IMPORT BUTTON (AJOUT) */}
+{isAdmin && !isOverdueMode && (
+<>
+<input
+ref={fileInputRef}
+type="file"
+accept=".csv,.xlsx,.xls"
+style={{ display: "none" }}
+onChange={(e) => importTasks(e.target.files?.[0])}
+/>
+<button
+onClick={() => fileInputRef.current?.click()}
+className="btn btn-light flex items-center"
+title="Importer un fichier (CSV/XLSX)"
+>
+<Upload className="w-5 h-5 mr-2" /> Importer
+</button>
+</>
 )}
 
 {isAdmin && (
