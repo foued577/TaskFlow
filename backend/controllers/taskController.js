@@ -5,6 +5,70 @@ const Project = require('../models/Project');
 const Team = require('../models/Team');
 
 // =====================================================
+// ✅ DUPLICATE TASK (DRAFT) (AJOUT)
+// =====================================================
+exports.getDuplicateDraft = async (req, res) => {
+try {
+const task = await Task.findById(req.params.id)
+.populate('assignedTo', 'firstName lastName email')
+.populate('project', 'name color teams team'); // ✅ cohérent avec getTask
+
+if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
+
+// ✅ ✅ ✅ ADMIN ACCESS BY TEAM (même logique que getTask) (AJOUT)
+if ((req.user.role === 'admin' && !req.user.isSuperAdmin)) {
+let userTeamIds = (req.user.teams || []).map(t => t.toString());
+
+// ✅ ✅ ✅ FALLBACK si User.teams pas à jour (AJOUT)
+if (!userTeamIds || userTeamIds.length === 0) {
+const teams = await Team.find({ "members.user": req.user.id }).select("_id");
+userTeamIds = teams.map(t => t._id.toString());
+}
+
+const projectTeamIds = [
+...((task.project?.teams || []).map(t => t.toString())),
+...(task.project?.team ? [task.project.team.toString()] : [])
+];
+
+const isAssignedToMe = task.assignedTo.some(u => u.toString() === req.user.id.toString());
+const hasTeamAccess = projectTeamIds.some(id => userTeamIds.includes(id));
+
+if (!hasTeamAccess && !isAssignedToMe) {
+return res.status(403).json({ success: false, message: 'Not authorized' });
+}
+}
+
+// Member access (même logique que getTask) (AJOUT)
+if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+const isAssigned = task.assignedTo.some(u => u.toString() === req.user.id);
+const isCreator = task.createdBy.toString() === req.user.id;
+
+if (!isAssigned && !isCreator) {
+return res.status(403).json({ success: false, message: 'Not authorized' });
+}
+}
+
+// Draft = copie nettoyée
+const draft = task.toObject();
+delete draft._id;
+delete draft.createdAt;
+delete draft.updatedAt;
+
+// Ajustements par défaut
+if (draft.title) draft.title = `Copie de - ${draft.title}`;
+
+// (optionnel) si tu veux éviter de copier les pièces jointes / sous-tâches, décommente :
+// draft.attachments = [];
+// draft.subtasks = [];
+
+res.status(200).json({ success: true, data: draft });
+
+} catch (err) {
+res.status(500).json({ success: false, message: 'Error duplicating task', error: err.message });
+}
+};
+
+// =====================================================
 // GET ALL TASKS
 // =====================================================
 exports.getTasks = async (req, res) => {
