@@ -9,7 +9,7 @@ const fs = require('fs');
 const XLSX = require('xlsx');
 const User = require('../models/User');
 
-// ✅ ✅ ✅ AJOUT : CSV fallback sans dépendance
+// ✅ ✅ ✅ AJOUT : CSV fallback sans dépendance (amélioré : ; , tab + guillemets)
 const parseCSVFallback = (content) => {
   const clean = String(content || '').replace(/^\uFEFF/, ''); // BOM
   const lines = clean
@@ -19,13 +19,62 @@ const parseCSVFallback = (content) => {
 
   if (lines.length < 2) return [];
 
-  const headers = lines[0].split(',').map((h) => h.trim());
+  // ✅ Détecter le séparateur le plus probable (Excel FR => ;)
+  const detectDelimiter = (line) => {
+    const candidates = [',', ';', '\t'];
+    let best = ',';
+    let bestCount = -1;
+    for (const d of candidates) {
+      const count = (line.match(new RegExp(`\\${d}`, 'g')) || []).length;
+      if (count > bestCount) {
+        bestCount = count;
+        best = d;
+      }
+    }
+    return best;
+  };
+
+  // ✅ Parser une ligne CSV avec guillemets ("") et séparateur dynamique
+  const parseLine = (line, delimiter) => {
+    const out = [];
+    let cur = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+
+      if (ch === '"') {
+        // "" => échappement d'un guillemet
+        if (inQuotes && line[i + 1] === '"') {
+          cur += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+        continue;
+      }
+
+      if (ch === delimiter && !inQuotes) {
+        out.push(cur.trim());
+        cur = '';
+        continue;
+      }
+
+      cur += ch;
+    }
+
+    out.push(cur.trim());
+    return out;
+  };
+
+  const delimiter = detectDelimiter(lines[0]);
+  const headers = parseLine(lines[0], delimiter).map((h) => h.trim());
 
   return lines.slice(1).map((line) => {
-    const values = line.split(',').map((v) => v.trim());
+    const values = parseLine(line, delimiter);
     const obj = {};
     headers.forEach((h, i) => {
-      obj[h] = values[i] || '';
+      obj[h] = values[i] ?? '';
     });
     return obj;
   });
@@ -742,7 +791,7 @@ title: obj.title || obj.titre || '',
 description: obj.description || obj.desc || '',
 projectId: obj.projectid || obj.projetid || obj.projet || obj.project || '',
 // ✅ ✅ ✅ AJOUT : nom de projet (FR/EN)
-projectName: obj.projectname || obj.nomdeprojet || obj.projetnom || obj.projetname || obj.project || '',
+projectName: obj.projectname || obj.nomdeprojet || obj.projetnom || obj.projetname || '',
 assignedToRaw: obj.assignedto || obj.assigne || obj.assignea || obj.assignera || '',
 priority: obj.priority || obj.priorite || 'medium',
 status: obj.status || obj.statut || 'not_started',
