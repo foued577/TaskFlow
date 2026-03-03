@@ -39,6 +39,22 @@ const parseCSVFallback = (content) => {
 };
 
 // =====================================================
+// ✅ TOTAL TASKS COUNT (GLOBAL) (AJOUT)
+// =====================================================
+exports.getTotalCount = async (req, res) => {
+  try {
+    const total = await Task.countDocuments({});
+    return res.status(200).json({ success: true, data: { total } });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: 'Error counting tasks',
+      error: err.message,
+    });
+  }
+};
+
+// =====================================================
 // ✅ DUPLICATE TASK (DRAFT) (AJOUT)
 // =====================================================
 exports.getDuplicateDraft = async (req, res) => {
@@ -747,7 +763,7 @@ obj[normalizeKey(k)] = r[k];
 return {
 title: obj.title || obj.titre || '',
 description: obj.description || obj.desc || '',
-projectId: obj.projectid || obj.projetid || obj.projet || obj.project || '',
+projectId: obj.projectid || obj.projetid || obj.projet || obj.project || obj.nomdeprojet || obj.projectname || '',
 assignedToRaw: obj.assignedto || obj.assigne || obj.assignea || obj.assignera || '',
 priority: obj.priority || obj.priorite || 'medium',
 status: obj.status || obj.statut || 'not_started',
@@ -766,7 +782,7 @@ const raw = mapRow(rows[i]);
 const rowNumber = i + 2; // +2 car ligne 1 = header
 
 if (!raw.title || !raw.projectId) {
-errors.push({ row: rowNumber, message: 'title/titre et projectId/projet sont obligatoires' });
+errors.push({ row: rowNumber, message: 'title/titre et projectId/projet (ou nom de projet) sont obligatoires' });
 continue;
 }
 
@@ -775,7 +791,7 @@ let project = null;
 if (mongoose.Types.ObjectId.isValid(String(raw.projectId))) {
 project = await Project.findById(raw.projectId);
 } else {
-project = await Project.findOne({ name: raw.projectId });
+project = await Project.findOne({ name: String(raw.projectId).trim() });
 }
 
 if (!project) {
