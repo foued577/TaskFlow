@@ -23,6 +23,48 @@ default: null
 timestamps: true
 });
 
+// ✅ ✅ ✅ AJOUT : NORMALIZATION FR / EN
+const normalizeTaskEnumText = (value) =>
+String(value || '')
+.trim()
+.toLowerCase()
+.normalize('NFD')
+.replace(/[\u0300-\u036f]/g, '');
+
+const statusEnumMap = {
+'non demarree': 'not_started',
+'non demarre': 'not_started',
+'not started': 'not_started',
+'not_started': 'not_started',
+'en cours': 'in_progress',
+'in progress': 'in_progress',
+'in_progress': 'in_progress',
+'terminee': 'completed',
+'termine': 'completed',
+'completed': 'completed'
+};
+
+const priorityEnumMap = {
+'basse': 'low',
+'low': 'low',
+'moyenne': 'medium',
+'medium': 'medium',
+'haute': 'high',
+'high': 'high',
+'urgente': 'urgent',
+'urgent': 'urgent'
+};
+
+const normalizeTaskStatus = (value) => {
+const key = normalizeTaskEnumText(value);
+return statusEnumMap[key] || value;
+};
+
+const normalizeTaskPriority = (value) => {
+const key = normalizeTaskEnumText(value);
+return priorityEnumMap[key] || value;
+};
+
 const taskSchema = new mongoose.Schema({
 title: {
 type: String,
@@ -46,7 +88,8 @@ ref: 'User'
 status: {
 type: String,
 enum: ['not_started', 'in_progress', 'completed'],
-default: 'not_started'
+default: 'not_started',
+set: normalizeTaskStatus
 },
 
 // ✅ ✅ ✅ AJOUT ARCHIVE
@@ -58,7 +101,8 @@ default: false
 priority: {
 type: String,
 enum: ['low', 'medium', 'high', 'urgent'],
-default: 'medium'
+default: 'medium',
+set: normalizeTaskPriority
 },
 estimatedHours: {
 type: Number,
@@ -113,6 +157,13 @@ required: true
 }
 }, {
 timestamps: true
+});
+
+// ✅ ✅ ✅ AJOUT : NORMALIZE AUSSI AVANT VALIDATION
+taskSchema.pre('validate', function(next) {
+if (this.status) this.status = normalizeTaskStatus(this.status);
+if (this.priority) this.priority = normalizeTaskPriority(this.priority);
+next();
 });
 
 // Indexes for efficient queries
