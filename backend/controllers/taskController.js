@@ -38,6 +38,69 @@ const parseCSVFallback = (content) => {
   });
 };
 
+// ✅ ✅ ✅ AJOUT : NORMALIZATION FR / EN POUR IMPORT
+const normalizeImportText = (value) =>
+  String(value || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+const statusImportMap = {
+  'non demarree': 'not_started',
+  'non demarre': 'not_started',
+  'not started': 'not_started',
+  'not_started': 'not_started',
+
+  'en cours': 'in_progress',
+  'in progress': 'in_progress',
+  'in_progress': 'in_progress',
+
+  'terminee': 'completed',
+  'termine': 'completed',
+  'completed': 'completed',
+};
+
+const priorityImportMap = {
+  basse: 'low',
+  low: 'low',
+
+  moyenne: 'medium',
+  medium: 'medium',
+
+  haute: 'high',
+  high: 'high',
+
+  urgente: 'urgent',
+  urgent: 'urgent',
+};
+
+const normalizeImportedStatus = (value) => {
+  const key = normalizeImportText(value);
+  return statusImportMap[key] || value;
+};
+
+const normalizeImportedPriority = (value) => {
+  const key = normalizeImportText(value);
+  return priorityImportMap[key] || value;
+};
+
+const parseImportedExcelDate = (value) => {
+  if (value === null || value === undefined || value === '') return '';
+
+  if (typeof value === 'number' && !isNaN(value) && value > 10000) {
+    const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+    return new Date(excelEpoch.getTime() + value * 86400000);
+  }
+
+  if (!isNaN(Number(value)) && Number(value) > 10000) {
+    const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+    return new Date(excelEpoch.getTime() + Number(value) * 86400000);
+  }
+
+  return value;
+};
+
 // =====================================================
 // ✅ TOTAL TASKS COUNT (GLOBAL) (AJOUT)
 // =====================================================
@@ -826,6 +889,13 @@ exports.importTasksFromFile = async (req, res) => {
         });
         continue;
       }
+
+      // ✅ ✅ ✅ AJOUT : NORMALISATION FR / EN
+      raw.status = normalizeImportedStatus(raw.status || 'not_started');
+      raw.priority = normalizeImportedPriority(raw.priority || 'medium');
+      raw.estimatedHours = Number(raw.estimatedHours || 0);
+      raw.startDate = parseImportedExcelDate(raw.startDate);
+      raw.dueDate = parseImportedExcelDate(raw.dueDate);
 
       // ✅ ✅ ✅ Projet : accepte ID Mongo OU nom du projet (fallback)
       let project = null;
